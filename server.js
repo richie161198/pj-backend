@@ -1,0 +1,240 @@
+const express = require("express");
+const bodyParser = require("body-parser");
+const http = require("http");
+const cors = require("cors");
+const morgan = require("morgan");
+const cloudinary = require("cloudinary").v2;
+const connetDb = require("./config/dbConfig");
+const dotenv = require("dotenv").config();
+const socket = require("socket.io");
+// const errorHandler = require("./middleware/error");
+// const { default: axios } = require('axios');
+const multer = require("multer");
+// const apiRoutes = require("./routers/api");
+const { notFound, errorHandler } = require("./middleware/error");
+const { Cashfree, CFEnvironment } = require("cashfree-pg");
+const axios = require("axios");
+// import { v4 as  } =require("uuid");
+// const encrypt = require("./helpers/crypto")
+
+// var cashfree = new Cashfree(CFEnvironment.PRODUCTION, "1029405fa8c83d78913ecd47b885049201", "cfsk_ma_prod_7009f0339c4ea057a6644e1ff0b092f9_fb32f95c")
+var cashfree = new Cashfree(
+  CFEnvironment.PRODUCTION,
+  process.env.CASHFREE_APP_ID_prod,
+  process.env.CASHFREE_SECRET_prod
+);
+
+
+// const CLIENT_ID = "1029405fa8c83d78913ecd47b885049201";     // App ID
+// const CLIENT_SECRET = "cfsk_ma_prod_7009f0339c4ea057a6644e1ff0b092f9_fb32f95c"; // Secret key
+connetDb();
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+const app = express();
+
+// app.use(helmet());
+// app.use(express.json({ limit: "5mb" }));
+// app.use(express.urlencoded({ extended: true }));
+const server = http.createServer(app);
+const io = socket(server);
+app.use(morgan("dev"));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(cors());
+
+app.get("/", (req, res) => {
+  console.log("started");
+  res.status(200).json({ status: "true", message: "api is working properly" });
+  console.log("api is working properly");
+});
+// app.use("/api/v1", apiRoutes);
+
+// app.use(notFound);
+// app.use(errorHandler);
+
+app.post("/create-order", async (req, res) => {
+  console.log("sddsds");
+  try {
+    var request = {
+      order_amount: 100,
+      order_currency: "INR",
+      order_id: "order_347692708045",
+      customer_details: {
+        customer_id: "walterwNdrcMi",
+        customer_phone: "9999999999",
+      },
+      order_meta: {
+        return_url:
+          "https://www.cashfree.com/devstudio/preview/pg/web/checkout?order_id={order_id}",
+      },
+    };
+    cashfree
+      .PGCreateOrder(request)
+      .then((response) => {
+        console.log("Order Created successfully:", response.data);
+        res.json({ message: response.data });
+      })
+      .catch((error) => {
+        console.error("Error:", error.response.data.message);
+        res.json({ message: response.data.message });
+      });
+  } catch (err) {
+    console.error(err.response?.data || err);
+    res
+      .status(500)
+      .json({
+        error: "Create order failed",
+        details: err.response?.data || err.message,
+      });
+  }
+});
+
+const CLIENT_ID = process.env.CLIENT_ID; // App ID
+const CLIENT_SECRET = process.env.CLIENT_SECRET; // Secret key
+// const CLIENT_ID = "1029405fa8c83d78913ecd47b885049201";     // App ID
+// const CLIENT_SECRET = "cfsk_ma_prod_7009f0339c4ea057a6644e1ff0b092f9_fb32f95c"; // Secret key
+const API_VERSION = "2025-01-01"; // include x-api-version header (docs example)
+
+app.post("/create-subscription", async (req, res) => {
+  try {
+    // you can accept customer details & plan from req.body
+    // const { subscription_id = sub_${Date.now()}, customer } = req.body;
+
+    const payload = {
+      subscription_id: "sub_341328222",
+      plan_details: {
+        plan_id: "test", // from dashboard or API
+        plan_note: "Monthly UPI AutoPay plan",
+      },
+      authorization_details: {
+        // include "upi" to enable UPI AutoPay; you can include other supported modes if needed
+        payment_methods: ["upi"],
+      },
+      // minimal customer details - expand per docs
+      customer_details: {
+        customer_name: "Test User",
+        customer_email: "test@example.com",
+        customer_phone: "9999999999",
+      },
+      // return_url where Cashfree will POST form on completion (set to your endpoint)
+      return_url: "https://your-server.example.com/subscription-return",
+      // plan or amount fields depend on your chosen subscription model — check docs
+      // e.g. "plan" or "amount" and "period" for periodic subscriptions
+    };
+
+    const r = await axios.post(
+      "https://sandbox.cashfree.com/pg/subscriptions",
+      payload,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "x-client-id": CLIENT_ID,
+          "x-client-secret": CLIENT_SECRET,
+          "x-api-version": API_VERSION,
+          // "x-request-id": uuidv4()
+        },
+      }
+    );
+
+    // Response contains subscription_id and subscription_session_id
+    return res.json(r.data);
+  } catch (err) {
+    console.error(
+      "create-subscription error:",
+      err?.response?.data || err.message
+    );
+    return res.status(500).json({ error: err?.response?.data || err.message });
+  }
+});
+
+// app.post('/upload', upload.single('image'), async (req, res) => {
+
+//     console.log("image", req.file);
+//   try {
+//     if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
+
+//     const result = await cloudinary.uploader.upload(req.file.path
+//       async (error, result) => {
+//         if (error) return res.status(500).json({ error });
+
+//         // Save to MongoDB
+//         const image = new Image({
+//           url: result.secure_url,
+//           public_id: result.public_id
+//         });
+//         await image.save();
+
+//         res.json({ message: 'Image uploaded', url: result.secure_url });
+//       }
+//     );
+//       console.log(result);
+//     // // Pipe image buffer to cloudinary
+//     // streamifier = require('streamifier');
+//     // streamifier.createReadStream(req.file.buffer).pipe(result);
+//   } catch (err) {
+//     console.error('Upload error:', err);
+//     res.status(500).json({ error: 'Server error' });
+//   }
+// });
+
+//  app.post('/upload', upload.single('image'), async (req, res) => {
+//         try {
+//             if (!req.file) {
+//                 return res.status(400).json({ message: 'No file uploaded' });
+//             }
+
+//             const result = await cloudinary.uploader.upload(req.file.path, {
+//                 folder: 'my_app_images' // Optional: specify a folder in Cloudinary
+//             });
+
+//             // Remove the temporary local file after successful upload
+//             // fs.unlinkSync(req.file.path);
+
+//             res.status(200).json({
+//                 message: 'Image uploaded successfully',
+//                 imageUrl: result.secure_url
+//             });
+//         } catch (error) {
+//             console.error('Error uploading image:', error);
+//             res.status(500).json({ message: 'Error uploading image' });
+//         }
+//     });
+
+app.post("/upload", upload.single("image"), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "No file uploaded" });
+  }
+
+  cloudinary.uploader
+    .upload_stream({ resource_type: "auto" }, (error, result) => {
+      if (error) {
+        console.log(error);
+        return res.status(500).json({ error: "Error uploading to Cloudinary" });
+      }
+      res.json({ public_id: result.public_id, url: result.secure_url });
+    })
+    .end(req.file.buffer);
+});
+
+app.use("/api/v0/auth", require("./routers/authRouter"));
+app.use("/api/v0/users", require("./routers/userRouter"));
+app.use("/api/v0/utils", require("./routers/utilsRouter"));
+app.use("/api/v0/order", require("./routers/orderRouter"));
+app.use("/api/v0/commerce", require("./routers/productRouter"));
+
+// app.all("*", (req, res) => {
+//   res.status(404).json({ status: "false", message: "route not found" });
+// });
+
+// app.use(errorHandler);
+
+server.listen(process.env.PORT, () => {
+  console.log(`Server on ${process.env.PORT} `);
+});
