@@ -17,7 +17,6 @@ const axios = require("axios");
 // import { v4 as  } =require("uuid");
 // const encrypt = require("./helpers/crypto")
 
-// var cashfree = new Cashfree(CFEnvironment.PRODUCTION, "1029405fa8c83d78913ecd47b885049201", "cfsk_ma_prod_7009f0339c4ea057a6644e1ff0b092f9_fb32f95c")
 var cashfree = new Cashfree(
   CFEnvironment.PRODUCTION,
   process.env.CASHFREE_APP_ID_prod,
@@ -25,8 +24,6 @@ var cashfree = new Cashfree(
 );
 
 
-// const CLIENT_ID = "1029405fa8c83d78913ecd47b885049201";     // App ID
-// const CLIENT_SECRET = "cfsk_ma_prod_7009f0339c4ea057a6644e1ff0b092f9_fb32f95c"; // Secret key
 connetDb();
 
 cloudinary.config({
@@ -98,8 +95,6 @@ app.post("/create-order", async (req, res) => {
 
 const CLIENT_ID = process.env.CLIENT_ID; // App ID
 const CLIENT_SECRET = process.env.CLIENT_SECRET; // Secret key
-// const CLIENT_ID = "1029405fa8c83d78913ecd47b885049201";     // App ID
-// const CLIENT_SECRET = "cfsk_ma_prod_7009f0339c4ea057a6644e1ff0b092f9_fb32f95c"; // Secret key
 const API_VERSION = "2025-01-01"; // include x-api-version header (docs example)
 
 app.post("/create-subscription", async (req, res) => {
