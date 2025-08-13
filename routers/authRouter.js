@@ -4,9 +4,11 @@ const { validateToken } = require("../middleware/tokenValidation");
 const multer = require("multer");
 const {
   signUpRequest,
-  signInRequest,
+  signInRequest,forgotPassword,
   // adminSignUpRequest,
   mail,
+  SendOTP,
+  verifyOtp,
   // adminSignInRequest
   // sendLoginOtp,
   // verifyOtp,
@@ -14,6 +16,9 @@ const {
 
 router.route("/register").post(signUpRequest);
 router.route("/login").post(signInRequest);
+router.route("/forgotPassword").post(forgotPassword);
+router.route("/SendOTP").post(SendOTP);
+router.route("/verifyOtp").post(verifyOtp);
 // router.route("/adminRegister").post(adminSignUpRequest);
 // router.route("/adminLogin").post(adminSignInRequest);
 router.route("/mail").post(mail);

@@ -14,6 +14,10 @@ const multer = require("multer");
 const { notFound, errorHandler } = require("./middleware/error");
 const { Cashfree, CFEnvironment } = require("cashfree-pg");
 const axios = require("axios");
+const SibApiV3Sdk = require("sib-api-v3-sdk");
+const { sendEmail } = require("./helpers/mailer");
+const { generateOTP } = require("./helpers/helpers");
+
 // import { v4 as  } =require("uuid");
 // const encrypt = require("./helpers/crypto")
 
@@ -56,42 +60,42 @@ app.get("/", (req, res) => {
 // app.use(notFound);
 // app.use(errorHandler);
 
-app.post("/create-order", async (req, res) => {
-  console.log("sddsds");
-  try {
-    var request = {
-      order_amount: 100,
-      order_currency: "INR",
-      order_id: "order_347692708045",
-      customer_details: {
-        customer_id: "walterwNdrcMi",
-        customer_phone: "9999999999",
-      },
-      order_meta: {
-        return_url:
-          "https://www.cashfree.com/devstudio/preview/pg/web/checkout?order_id={order_id}",
-      },
-    };
-    cashfree
-      .PGCreateOrder(request)
-      .then((response) => {
-        console.log("Order Created successfully:", response.data);
-        res.json({ message: response.data });
-      })
-      .catch((error) => {
-        console.error("Error:", error.response.data.message);
-        res.json({ message: response.data.message });
-      });
-  } catch (err) {
-    console.error(err.response?.data || err);
-    res
-      .status(500)
-      .json({
-        error: "Create order failed",
-        details: err.response?.data || err.message,
-      });
-  }
-});
+// app.post("/create-order", async (req, res) => {
+//   console.log("sddsds");
+//   try {
+//     var request = {
+//       order_amount: 100,
+//       order_currency: "INR",
+//       order_id: "order_34708045",
+//       customer_details: {
+//         customer_id: "walterwNdrcMi",
+//         customer_phone: "9999999999",
+//       },
+//       order_meta: {
+//         return_url:
+//           "https://www.cashfree.com/devstudio/preview/pg/web/checkout?order_id={order_id}",
+//       },
+//     };
+//     cashfree
+//       .PGCreateOrder(request)
+//       .then((response) => {
+//         console.log("Order Created successfully:", response.data);
+//         res.json({ message: response.data });
+//       })
+//       .catch((error) => {
+//         console.error("Error:", error.response.data.message);
+//         res.json({ message: response.data.message });
+//       });
+//   } catch (err) {
+//     console.error(err.response?.data || err);
+//     res
+//       .status(500)
+//       .json({
+//         error: "Create order failed",
+//         details: err.response?.data || err.message,
+//       });
+//   }
+// });
 
 const CLIENT_ID = process.env.CLIENT_ID; // App ID
 const CLIENT_SECRET = process.env.CLIENT_SECRET; // Secret key
@@ -224,6 +228,8 @@ app.use("/api/v0/utils", require("./routers/utilsRouter"));
 app.use("/api/v0/order", require("./routers/orderRouter"));
 app.use("/api/v0/commerce", require("./routers/productRouter"));
 
+
+// Start server
 // app.all("*", (req, res) => {
 //   res.status(404).json({ status: "false", message: "route not found" });
 // });

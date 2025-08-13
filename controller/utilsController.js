@@ -1,5 +1,7 @@
 const { default: axios } = require("axios");
 const asyncHandler = require("express-async-handler");
+const { generateOTP } = require("../helpers/helpers");
+const { sendEmail } = require("../helpers/mailer");
 
 
 const getGoldPrice = asyncHandler(async (req, res) => {
@@ -38,6 +40,34 @@ const getbanners = asyncHandler(async (req, res) => {
     res.status(200).json({message:"banners"})
 })
 
+const sendMailotp = asyncHandler( async (req, res) => {
+  try {
+    const { toEmail, toName } = req.body;
+console.log("sendMailotp", toEmail, toName);
+    if (!toEmail) {
+      return res.status(400).json({ error: 'Recipient email is required' });
+    }
+
+    const otp = generateOTP();
+    const htmlContent = `
+      <h2>Your OTP Code</h2>
+      <p>Dear ${toName || 'User'},</p>
+      <p>Your OTP is: <strong>${otp}</strong></p>
+      <p>This code will expire in 10 minutes.</p>
+    `;
+
+  
+
+    const response = await sendEmail(toEmail, 'Your OTP Code', htmlContent, toName);
+
+
+    res.json({ success: true, data: response, otp });
+  } catch (error) {
+    console.error('Error sending OTP:', error);
+    res.status(500).json({ error: 'Failed to send OTP' });
+  }
+});
+
 const uploadimages = asyncHandler(async (req, res) => {
   // console.log(req.file);
   //   if (!req.file) {
@@ -53,4 +83,4 @@ const uploadimages = asyncHandler(async (req, res) => {
   // }).end(req.file.buffer);
 })
 
-module.exports={getGoldPrice,getbanners,uploadimages}
+module.exports={getGoldPrice,sendMailotp,getbanners,uploadimages}

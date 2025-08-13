@@ -33,9 +33,23 @@ const userSchema = mongoose.Schema(
     referralCode: {
       type: String,
     },
+    otp: {
+      type: String,
+    },
+    otpExpiry:{
+      type: String
+    },
     lastLogin: {
       type: Date,
     },
+    role: {
+      type: String,
+      default: "user",
+    },transactionPin: {
+  type: String,
+  default: null
+}
+,
 
     phone: {
       type: String,

@@ -1,15 +1,14 @@
 const transactionModel = require("../models/orderModel");
-const User = require("../models/userModel");
 const axios = require("axios");
-const settingsModel = require("../models/settings_model");
 const orderModel = require("../models/orderModel");
-
-// const Razorpay = require('razorpay');
+const { Cashfree, CFEnvironment } = require("cashfree-pg");
+var cashfree = new Cashfree(
+  CFEnvironment.PRODUCTION,
+  process.env.CASHFREE_APP_ID_prod,
+  process.env.CASHFREE_SECRET_prod
+);
 const userModel = require("../models/userModel");
-// const razorpay = new Razorpay({
-//     key_id: 'rzp_test_HjGAinZNMpVBaE',
-//     key_secret: 'nAffDZ365JRyOoI9yR0OOd2t',
-// });
+
 
 async function fetchLiveGoldPriceINR() {
   try {
@@ -63,14 +62,26 @@ const withdrawINR = async (req, res) => {
 };
 const buyOrSellGold = async (req, res) => {
   // const userId = req.user.id;
-  const userId = "6895539eb12327731f85535f";
+  // const userId = "6895539eb12327731f85535f";
+  // const {
+  //   orderType, // "buy" or "sell"
+  //   transactionType, // "gold"
+  //   product, // e.g., "Gold 24K"
+  //   qty, // optional for buy
+  //   Payment_method,
+  //   amount, // INR total for buy/sell
+  // } = req.body;
+
+    const userId = req.user.id;
   const {
     orderType, // "buy" or "sell"
     transactionType, // "gold"
     product, // e.g., "Gold 24K"
-    qty, // optional for buy
+    goldQty, // optional for buy
+    gstAmount,
+    goldPrice,
     Payment_method,
-    amount, // INR total for buy/sell
+    inrAmount, // INR total for buy/sell
   } = req.body;
 
   try {
@@ -80,47 +91,44 @@ const buyOrSellGold = async (req, res) => {
     if (!user)
       return res.status(404).json({ status: false, message: "User not found" });
 
-    // Get GST rate from DB
-    // const settings = await settingsModel.findOne({});
-    // const gstRate = settings?.goldGSTRate || 0.03;
-    const gstRate = 0.03;
-    // Get live gold price per gram in INR
-    const livePrice = await fetchLiveGoldPriceINR();
-    console.log("liver price:", livePrice);
-    const goldPrice = livePrice || 7200; // fallback price
+    // const gstRate = 0.03;
+    // // Get live gold price per gram in INR
+    // const livePrice = await fetchLiveGoldPriceINR();
+    // console.log("liver price:", livePrice);
+    // const goldPrice = livePrice || 7200; // fallback price
 
-    // GST & net amount
-    const gstAmount = +(amount * gstRate).toFixed(2);
-    const netAmount = +(amount - gstAmount).toFixed(2);
+    // // GST & net amount
+    // const gstAmount = +(amount * gstRate).toFixed(2);
+    // const netAmount = +(amount - gstAmount).toFixed(2);
 
     if (orderType === "buy") {
-      const goldQty = +(netAmount / goldPrice).toFixed(4);
+      // const goldQty = +(netAmount / goldPrice).toFixed(4);
 
-      if (user.balanceINR < amount) {
-        return res
-          .status(400)
-          .json({ status: false, message: "Insufficient INR balance" });
-      }
+      // if (user.balanceINR < amount) {
+      //   return res
+      //     .status(400)
+      //     .json({ status: false, message: "Insufficient INR balance" });
+      // }
 
       // const newGoldBalance = (+user.goldBalance + goldQty).toFixed(2);
       const newGoldBalance = Number(user.goldBalance) + goldQty;
-      const newINRBalance = (+user.balanceINR - amount).toFixed(2);
-      console.log(
-        "liver price:",
-        user.goldBalance,
-        user.balanceINR,
-        newGoldBalance,
-        newINRBalance
-      );
+      // const newINRBalance = (+user.balanceINR - amount).toFixed(2);
+      // console.log(
+      //   "liver price:",
+      //   user.goldBalance,
+      //   user.balanceINR,
+      //   newGoldBalance,
+      //   newINRBalance
+      // );
 
       await userModel.findByIdAndUpdate(userId, {
         goldBalance: newGoldBalance.toString(),
-        balanceINR: newINRBalance,
+        // balanceINR: newINRBalance,
       });
 
       await transactionModel.create({
         userId,
-        orderId: `ORD-${Date.now()}`,
+        orderId: `PGORD-${Date.now()}`,
         orderType,
         transactionType,
         gst_value: gstAmount.toString(),
@@ -128,18 +136,17 @@ const buyOrSellGold = async (req, res) => {
         price: goldPrice.toString(),
         qty: goldQty.toString(),
         Payment_method,
-        amount: amount.toString(),
-        status: "completed",
+        amount: inrAmount.toString(),
+        status: "created",
       });
 
       return res.status(201).json({
         status: true,
-        message: `Bought ${goldQty}g gold for ₹${amount} (₹${gstAmount} GST applied)`,
+        message: `Bought ${goldQty}g gold for ₹${inrAmount} (₹${gstAmount} GST applied)`,
         goldBalance: newGoldBalance,
-        balanceINR: newINRBalance,
       });
     } else if (orderType === "sell") {
-      const goldQty = +(amount / goldPrice).toFixed(4);
+      // const goldQty = +(amount / goldPrice).toFixed(4);
 
       if (user.goldBalance < goldQty) {
         return res
@@ -147,10 +154,10 @@ const buyOrSellGold = async (req, res) => {
           .json({ status: false, message: "Insufficient gold balance" });
       }
 
-      const receivedAmount = netAmount;
+      const receivedAmount = inrAmount;
 
       const newGoldBalance = (+user.goldBalance - goldQty).toFixed(4);
-      const newINRBalance = (+user.balanceINR + receivedAmount).toFixed(2);
+      const newINRBalance = Number(user.balanceINR) + Number(receivedAmount)
 
       await userModel.findByIdAndUpdate(userId, {
         goldBalance: newGoldBalance,
@@ -168,7 +175,7 @@ const buyOrSellGold = async (req, res) => {
         qty: goldQty.toString(),
         Payment_method,
         amount: receivedAmount.toString(),
-        status: "completed",
+        status: "created",
       });
       // user.goldBalance = (user.goldBalance || 0) - goldQty;
       // await user.save();
@@ -307,11 +314,53 @@ const getParticularOrderHistory = async (req, res) => {
   }
 };
 
+const createOrder = async (req, res) => {
+  console.log("sddsds", req.body);
+    const { order_amount } = req.body;
+   const orderId = "PGOR" + Date.now();
+  try {
+    var request = {
+      order_amount: order_amount,
+      order_currency: "INR",
+      order_id: orderId,
+      customer_details: {
+        customer_id: "walterwNdrcMi",
+        customer_phone: "9999999999",
+      },
+      order_meta: {
+        return_url:
+          "https://www.cashfree.com/devstudio/preview/pg/web/checkout?order_id={order_id}",
+      },
+    };
+    cashfree
+      .PGCreateOrder(request)
+      .then((response) => {
+        console.log("Order Created successfully:", response.data);
+        res.status(200).json({ message: response.data });
+      })
+      .catch((error) => {
+        console.error("Error:", error.response.data.message);
+        res.status(400).json({ message: response.data.message });
+      });
+  } catch (err) {
+    console.error(err.response?.data || err);
+    res
+      .status(500)
+      .json({
+        error: "Create order failed",
+        details: err.response?.data || err.message,
+      });
+  }
+};
+
+
+
+
 module.exports = {
   buyOrSellGold,
   getAllOrderHistory,
   getUserOrderHistory,
   getParticularOrderHistory,
   depositINR,
-  withdrawINR,
+  withdrawINR,createOrder
 };

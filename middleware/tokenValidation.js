@@ -27,27 +27,35 @@
 //     }
 // });
 
-
 const jwt = require("jsonwebtoken");
 const asyncHandler = require("express-async-handler");
 const User = require("../models/userModel");
-
 const isAuth = asyncHandler(async (req, res, next) => {
   let token = null;
   const authHeader = req.headers.authorization;
+  
   if (authHeader && authHeader.startsWith("Bearer ")) {
     token = authHeader.split(" ")[1];
   } else if (req.query && req.query.token) {
     token = req.query.token;
   }
+
   if (!token) {
     return res.status(401).json({ status: false, message: "Not authorized, token missing" });
   }
+
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select("-password");
-    if(!user) return res.status(401).json({ status:false, message:"User not found" });
-    req.user = user;
+        // console.log("decoded user:", decoded.user.id);
+
+    // const user = await User.findById(decoded.user.id);
+    // console.log("Authenticated user:", user);
+
+    // if (!user) {
+    //   return res.status(401).json({ status: false, message: "User not found" });
+    // }
+
+    req.user = decoded.user;
     next();
   } catch (err) {
     res.status(401).json({ status: false, message: "Token invalid/expired" });
