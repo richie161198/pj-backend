@@ -1,8 +1,8 @@
 const mongoose = require("mongoose");
 
 const OrderSchema = new mongoose.Schema({
-  orderId: { type: String, index: true, unique: true },
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  // orderId: { type: String, index: true, unique: true },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   items: [{
     productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
     qty: Number,
@@ -17,24 +17,21 @@ const OrderSchema = new mongoose.Schema({
     grandTotal: Number,
     currency: { type: String, default: "INR" }
   },
-  payment: {
-    method: String,
-    status: { type: String, enum: ["pending","paid","failed","refunded"], default: "pending" },
-    transactionId: String,
-    paidAt: Date
-  },
+  paymentMethod: { type: String, enum: ["COD", "Card", "UPI"], default: "COD" },
+  subtotal: Number,
+  deliveryFee: Number,
+  gst: Number,
+  total: Number,
+  status: { type: String, default: "Pending Payment" },
+
   shippingAddress: { type: mongoose.Schema.Types.ObjectId, ref: "Address" },
-  status: {
-    type: String,
-    enum: ["created","confirmed","packed","shipped","delivered","cancelled","returned","refunded"],
-    default: "created"
-  },
-  shipment: {
-    carrier: String,
-    trackingId: String,
-    estimatedDelivery: Date
-  },
-  notes: String,
+
+  // shipment: {
+  //   carrier: String,
+  //   trackingId: String,
+  //   estimatedDelivery: Date
+  // },
+  // notes: String,
   createdAt: { type: Date, default: Date.now },
   updatedAt: Date
 });

@@ -1,33 +1,55 @@
 const mongoose = require("mongoose");
 
-// const productSchema = new mongoose.Schema(
-//   {
-//     name: { type: String, required: true },
-//     description: { type: String },
-//     price: { type: Number, required: true },
-//     category: { type: String },
-//     stock: { type: Number, default: 0 },
-//     imageUrl: { type: String },
-//   },
-//   { timestamps: true }
-// );
+const detailSchema = new mongoose.Schema({
+  type: { type: String, required: true },   // e.g. "Metal", "Stone", "Pearl"
+  name: { type: String },                   // e.g. "Gold", "Diamond"
+  attributes: { type: Map, of: mongoose.Schema.Types.Mixed } 
+  // flexible key-value pairs (e.g. { karatage: "18K", weight: 2.96, clarity: "VS1" })
+}, { _id: false });
 
+// Sub-schema for price details
+const priceDetailSchema = new mongoose.Schema({
+  name: { type: String, required: true },   // e.g. "Gold", "Stone", "Making Charges"
+  weight: { type: String },                 // e.g. "2.903g"
+  value: { type: Number, required: true }   // e.g. 22127.86
+}, { _id: false });
 
-const ProductSchema = new mongoose.Schema({
-  sku: { type: String, index: true },
-  name: { type: String, required: true },
-  description: { type: String, required: true },
-  images: [String],
-  price: { type: Number, required: true },
-  mrp: Number,
-  currency: { type: String, default: "INR" },
-  stock: { type: Number, default: 0 },
-  reserved: { type: Number, default: 0 },
-  categories: [String],
-  attributes: mongoose.Mixed,
-  active: { type: Boolean, default: true },
-  rating: { type: Number, default: 0 },
-  createdAt: { type: Date, default: Date.now }
-});
+const productSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true },      
+    brand: { type: String, required: true },     
+    description: { type: String },
+    sellingprice: { type: Number, required: true },
+    categories: [String],
 
-module.exports = mongoose.model("Product", ProductSchema);
+    skuId: { type: String, unique: true },       
+    active: { type: Boolean, default: true },
+
+    rating: {
+      value: { type: Number, default: 0 },       
+      count: { type: Number, default: 0 }        
+    },
+    stock: { type: Number, default: 0 },
+
+    caretOptions: [{ type: String }],           
+    selectedCaret: { type: String },            
+
+    // 🔑 Common flexible product details
+    productDetails: [detailSchema],             
+
+    // Expandable Price Details
+    priceDetails: [priceDetailSchema],          
+
+    subtotal: {
+      weight: { type: String },                 
+      value: { type: Number }                   
+    },
+    gst: { type: Number, default: 0 },
+    total: { type: Number, required: true },    
+
+    images: [{ type: String }]                  
+  },
+  { timestamps: true }
+);
+
+module.exports = mongoose.model("Product", productSchema);

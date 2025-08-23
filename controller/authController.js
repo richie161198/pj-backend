@@ -1,13 +1,14 @@
 const asyncHandler = require("express-async-handler");
-const crypto = require("../helpers/crypto");
+// const crypto = require("../helpers/crypto");
 const helper = require("../helpers/helpers");
 const multer = require("multer");
-const { generateToken } = require("../helpers/helpers");
+const { generateToken, hashValue, compareValue, isEmail } = require("../helpers/helpers");
 // const User = require("../models/userModel");
 // const adminModel = require("../models/admin_model");
 const userModel = require("../models/userModel");
 const bcrypt = require("bcryptjs");
 const { sendMail, sendEmail } = require("../helpers/mailer");
+const crypto = require("crypto");
 
 const signUpRequest = asyncHandler(async (req, res) => {
   const { name, email, phone, password, referredBy } = req.body;
@@ -22,25 +23,32 @@ const signUpRequest = asyncHandler(async (req, res) => {
     if (userAvailable) {
       res.status(400);
       throw new Error("User already exists");
-    }
+    }else{
 
-    const hashedPassword = await bcrypt.hash(password, 12);
+       const hashedPassword = await bcrypt.hash(password, 12);
     const referralCode = helper.referral();
     const appId = helper.appId();
 
-    const otp = helper.generateOTP();
+    const otp = helper.generateNumericOtp();
+          const codeHash = await hashValue(otp);
+
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+
+
+    console.log(email,otp,referralCode,appId);
+
     const htmlContent = `
-      <h2>Your OTP Code</h2>
+      <h2>Account activation Code</h2>
       <p>Dear ${name || "User"},</p>
-      <p>Your OTP is: <strong>${otp}</strong></p>
+      <p>Your OTP for password reset is: <strong>${otp}</strong></p>
       <p>This code will expire in 10 minutes.</p>
     `;
 
-    await sendEmail(email, "Your OTP Code", htmlContent, name);
+    await sendEmail(email, "Account activation Code", htmlContent, name);
     const user = await userModel.create({
       name,
       email,
-      otp: otp,
+      otp: { codeHash, expiresAt },
       referralCode: referralCode,
       referredBy: referredBy,
       appId: appId,
@@ -48,9 +56,7 @@ const signUpRequest = asyncHandler(async (req, res) => {
       password: hashedPassword,
     });
 
-    if (user) {
-      if (data == true)
-        res.status(200).json({
+    if (user) { res.status(200).json({
           status: true,
           message: "We have sent otp your email to verify it",
           data: {
@@ -59,13 +65,15 @@ const signUpRequest = asyncHandler(async (req, res) => {
             email: user.email,
           },
         });
-      if (data == false)
-        res.status(404).json({ message: "Failed - Please try again" });
     } else {
-      res.status(400).json({ message: "User already exist" });
-      throw new Error("Use already Exist");
+      res.status(400).json({ message: "failed - please try again" });
     }
+    }
+
+   
   } catch (error) {
+          res.status(400).json({ message: "failed - please try again" });
+
     console.log("err signup: ", error);
   }
 });
@@ -125,7 +133,7 @@ const mail = async (req, res) => {
 // Forgot Password Request
 const SendOTP = asyncHandler(async (req, res) => {
   const { email } = req.body;
-console.log("Forgot Password Request for:", email);
+  console.log("Forgot Password Request for:", email);
   if (!email) {
     res.status(400);
     throw new Error("Email is required");
@@ -142,7 +150,7 @@ console.log("Forgot Password Request for:", email);
     // Generate OTP
     const otp = helper.generateOTP();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
-console.log("OTP:", otp, "Expiry:", otpExpiry);
+    console.log("OTP:", otp, "Expiry:", otpExpiry);
     // Send Email
     const htmlContent = `
       <h2>Password Reset OTP</h2>
@@ -167,38 +175,6 @@ console.log("OTP:", otp, "Expiry:", otpExpiry);
   }
 });
 
-const verifyOtp = asyncHandler(async (req, res) => {
-  const { email, otp } = req.body;
-
-  if (!email || !otp) {
-    res.status(400);
-    throw new Error("Please provide email and OTP");
-  }
-  try{
-      const user = await userModel.findOne({ email });
-
-    if (!user) {
-      res.status(404);
-      throw new Error("User not found");
-    }
-    if (user.otp !== otp || user.otpExpiry < new Date()) {
-      res.status(400);
-      throw new Error("Invalid or expired OTP");
-    }
-    res.status(200).json({
-      status: true,
-      message: "OTP verified successfully",
-    });
-    // Optionally, you can clear the OTP after verification
-    user.otp = null; // Clear OTP after successful verification
-    user.otpExpiry = null; // Clear OTP expiry
-    await user.save();  
-
-  }catch (error) {
-    console.error("Error in OTP verification:", error);
-    res.status(500).json({ error: "Failed to verify OTP" });
-  }
-});
 
 
 const forgotPassword = asyncHandler(async (req, res) => {
@@ -238,6 +214,176 @@ const forgotPassword = asyncHandler(async (req, res) => {
   }
 });
 
+const forgotPasswordRequest = asyncHandler(async (req, res) => {
+  try {
+    const { email } = req.body;
+    console.log("mm", email);
+          const user = await userModel.findOne({ email });
+
+    // if (!isEmail(email)) return res.status(400).json({ message: 'Invalid email' });
+    if (user) {
+
+
+      const otp = helper.generateNumericOtp();
+      const codeHash = await hashValue(otp);
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+      console.log(otp,
+        codeHash,
+        expiresAt)
+      user.otp = { codeHash, expiresAt };
+      user.resetToken = null;
+      await user.save();
+
+      console.log("email,otp", email, otp);
+      await sendEmail(
+        email,
+        "Your OTP Code",
+        `<h2>Your OTP is: <b>${otp}</b></h2><p>Valid for 5 minutes</p>`,
+        user.name
+      );
+
+      return res.json({ message: `Hi ${user.name} OTP has been sent to registered mail id .` });
+    }
+  } catch (e) {
+    console.log(e);
+    res.status(500).json({ message: "Error in forgot password", error: e });
+  }
+});
+const verifyOtp = asyncHandler( async (req, res) => {
+  try {
+    const { email, otp } = req.body || {};
+    if (!isEmail(email) || !otp) return res.status(400).json({ message: 'Invalid payload' });
+
+    const user = await userModel.findOne({ email });
+
+    if(user){
+
+    if (!user || !user.otp?.codeHash || !user.otp?.expiresAt) {
+      return res.status(400).json({ message: 'Invalid or expired OTP' });
+    }
+
+    if (user.otp.expiresAt < new Date()) {
+      user.otp = null;
+      await user.save();
+      return res.status(400).json({ message: 'Expired OTP' });
+    }
+
+    const ok = await compareValue(otp, user.otp.codeHash);
+    if (!ok) return res.status(400).json({ message: 'Invalid  OTP' });
+
+    // OTP valid → issue a reset token and clear OTP
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 min
+    user.resetToken = { token, expiresAt };
+    user.otp = undefined;
+    await user.save();
+
+    return res.json({ resetToken: token, expiresInMinutes: 15 });
+    }else{
+      res.status(400).json({message:"User can't found"});
+    }
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+const activateAccount = asyncHandler( async (req, res) => {
+  try {
+    const { email, otp } = req.body || {};
+    if (!isEmail(email) || !otp) return res.status(400).json({ message: 'Invalid payload' });
+
+    const user = await userModel.findOne({ email });
+
+    if(user){
+console.log("user",user)
+    if (!user || !user.otp?.codeHash || !user.otp?.expiresAt) {
+      return res.status(400).json({ message: 'Invalid or expired OTP' });
+    }
+
+    if (user.otp.expiresAt < new Date()) {
+      user.otp = null;
+      await user.save();
+      return res.status(400).json({ message: 'Expired OTP' });
+    }
+
+    const ok = await compareValue(otp, user.otp.codeHash);
+    if (!ok) return res.status(400).json({ message: 'Invalid  OTP' });
+
+    user.activeAccount = true;
+    await user.save();
+  const accessToken = generateToken({
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    },
+  });
+
+ 
+    return  res.status(200).json({
+    status: "success",
+    message:"account activated",
+    token: accessToken,
+  });
+    }else{
+      res.status(400).json({message:"User can't found"});
+    }
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+const updatePassword= asyncHandler(async (req, res) => {
+   try {
+    const { email, resetToken, newPassword } = req.body || {};
+    if (!isEmail(email) || !resetToken ) {
+      return res.status(400).json({ message: 'Invalid payload' });
+    }
+
+    const user = await userModel.findOne({ email });
+
+    if(user){
+
+      console.log(user);
+    if (!user || !user.resetToken?.token || !user.resetToken?.expiresAt) {
+      return res.status(400).json({ message: 'Invalid or expired token' });
+    }
+
+    if (user.resetToken.expiresAt < new Date()) {
+      user.resetToken = undefined;
+      await user.save();
+      return res.status(400).json({ message: 'Expired token' });
+    }
+
+    if (user.resetToken.token !== resetToken) {
+      return res.status(400).json({ message: 'Invalid or expired token' });
+    }
+
+    console.log("password",newPassword);
+
+    console.log("bf password",user.password);
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+
+    console.log("af passwordHash",passwordHash);
+    user.password = passwordHash;
+    user.passwordChangedAt = new Date();
+    user.resetToken = null; // consume token
+    await user.save();
+    console.log("user",user);
+
+    return res.json({ message: 'Password reset successful' });
+    }else{
+            res.status(400).json({message:"User can't found"});
+
+    }
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
 
 // const adminSignUpRequest = async (req, res) => {
 //     const { name, email, password } = req.body;
@@ -268,8 +414,8 @@ module.exports = {
   signUpRequest,
   signInRequest,
   forgotPassword,
-  verifyOtp,
+  verifyOtp,updatePassword,activateAccount,
   SendOTP,
-  mail,
+  mail, forgotPasswordRequest
   // adminSignInRequest
 };

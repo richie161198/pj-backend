@@ -2,11 +2,14 @@ const mongoose = require("mongoose");
 const expressAsyncHandler = require("express-async-handler");
 const jwt = require("jsonwebtoken");
 
-module.exports.generateToken = (data) => {
+const bcrypt = require("bcryptjs");
+const crypto = require('crypto');
+
+function generateToken  (data)  {
   return jwt.sign(data, process.env.JWT_SECRET, { expiresIn: "1d" });
 };
 
-module.exports.referral = () => {
+function referral () {
   let result = "",
     characters =
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",
@@ -17,7 +20,7 @@ module.exports.referral = () => {
   return result;
 };
 
-module.exports.generateOTP = () => {
+function generateOTP  ()  {
   const digits = "0123456789";
   let otp = "";
   for (let i = 0; i < 6; i++) {
@@ -26,7 +29,7 @@ module.exports.generateOTP = () => {
   return otp;
 };
 
-module.exports.appId = () => {
+function appId  ()  {
   let result = "EST",
     characters = "0123456789",
     Length = characters.length;
@@ -34,4 +37,34 @@ module.exports.appId = () => {
     result += characters.charAt(Math.floor(Math.random() * Length));
   }
   return result;
+};
+
+
+
+// /** Generate a 6-digit OTP as a string */
+function generateNumericOtp(length = 6) {
+  // cryptographically strong random digits
+  let otp = '';
+  while (otp.length < length) {
+    otp += (crypto.randomInt(0, 10)).toString();
+  }
+  return otp;
+}
+function isEmail(str) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(str).toLowerCase());
+}
+/** Hash any sensitive value (OTP) */
+async function hashValue(value) {
+  const saltRounds = 10;
+  return bcrypt.hash(value, saltRounds);
+}
+
+async function compareValue(value, hash) {
+  return bcrypt.compare(value, hash);
+}
+
+module.exports = {
+  generateNumericOtp,referral,
+  hashValue,
+  compareValue,isEmail,generateOTP,appId,generateToken
 };

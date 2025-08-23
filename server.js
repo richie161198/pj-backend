@@ -17,6 +17,7 @@ const axios = require("axios");
 const SibApiV3Sdk = require("sib-api-v3-sdk");
 const { sendEmail } = require("./helpers/mailer");
 const { generateOTP } = require("./helpers/helpers");
+const { v4: uuidv4 } = require("uuid");
 
 // import { v4 as  } =require("uuid");
 // const encrypt = require("./helpers/crypto")
@@ -97,61 +98,63 @@ app.get("/", (req, res) => {
 //   }
 // });
 
-const CLIENT_ID = process.env.CLIENT_ID; // App ID
-const CLIENT_SECRET = process.env.CLIENT_SECRET; // Secret key
-const API_VERSION = "2025-01-01"; // include x-api-version header (docs example)
+const CLIENT_ID = process.env.TCLIENT_ID; 
+const CLIENT_SECRET = process.env.TCLIENT_SECRET;
+const API_VERSION = "2025-01-01";
 
-app.post("/create-subscription", async (req, res) => {
-  try {
-    // you can accept customer details & plan from req.body
-    // const { subscription_id = sub_${Date.now()}, customer } = req.body;
+// app.post("/create-subscription", async (req, res) => {
+//   try {
+//     // you can accept customer details & plan from req.body
+//     // const { subscription_id = sub_${Date.now()}, customer } = req.body;
 
-    const payload = {
-      subscription_id: "sub_341328222",
-      plan_details: {
-        plan_id: "test", // from dashboard or API
-        plan_note: "Monthly UPI AutoPay plan",
-      },
-      authorization_details: {
-        // include "upi" to enable UPI AutoPay; you can include other supported modes if needed
-        payment_methods: ["upi"],
-      },
-      // minimal customer details - expand per docs
-      customer_details: {
-        customer_name: "Test User",
-        customer_email: "test@example.com",
-        customer_phone: "9999999999",
-      },
-      // return_url where Cashfree will POST form on completion (set to your endpoint)
-      return_url: "https://your-server.example.com/subscription-return",
-      // plan or amount fields depend on your chosen subscription model — check docs
-      // e.g. "plan" or "amount" and "period" for periodic subscriptions
-    };
+//     const payload = {
+//       subscription_id: "34545322",
+//       plan_details: {
+//         plan_id: "test", // from dashboard or API
+//         plan_note: "Monthly UPI AutoPay plan",
+//       },
+//       authorization_details: {
+//         // include "upi" to enable UPI AutoPay; you can include other supported modes if needed
+//         payment_methods: ["upi"],
+//       },
+//       // minimal customer details - expand per docs
+//       customer_details: {
+//         customer_name: "FUser",
+//         customer_email: "test@perciousgoldsmith.com",
+//         customer_phone: "7092053592",
+//       },
+//       // return_url where Cashfree will POST form on completion (set to your endpoint)
+//       return_url: "https://your-server.example.com/subscription-return",
+//       // plan or amount fields depend on your chosen subscription model — check docs
+//       // e.g. "plan" or "amount" and "period" for periodic subscriptions
+//     };
+// console.log("payload",payload);
+//     const r = await axios.post(
+//       "https://sandbox.cashfree.com/pg/subscriptions",
+//       payload,
+//       {
+//         headers: {
+//           "Content-Type": "application/json",
+//           "x-client-id": CLIENT_ID,
+//           "x-client-secret": CLIENT_SECRET,
+//           "x-api-version": API_VERSION,
+//           // "x-request-id": uuidv4()
+//         },
+//       }
+//     );
 
-    const r = await axios.post(
-      "https://sandbox.cashfree.com/pg/subscriptions",
-      payload,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "x-client-id": CLIENT_ID,
-          "x-client-secret": CLIENT_SECRET,
-          "x-api-version": API_VERSION,
-          // "x-request-id": uuidv4()
-        },
-      }
-    );
+//     console.log("res",r.data,r.status);
 
-    // Response contains subscription_id and subscription_session_id
-    return res.json(r.data);
-  } catch (err) {
-    console.error(
-      "create-subscription error:",
-      err?.response?.data || err.message
-    );
-    return res.status(500).json({ error: err?.response?.data || err.message });
-  }
-});
+//     // Response contains subscription_id and subscription_session_id
+//     return res.json(r.data);
+//   } catch (err) {
+//     console.error(
+//       "create-subscription error:",
+//       err?.response?.data || err.message
+//     );
+//     return res.status(500).json({ error: err?.response?.data || err.message });
+//   }
+// });
 
 // app.post('/upload', upload.single('image'), async (req, res) => {
 
@@ -205,6 +208,107 @@ app.post("/create-subscription", async (req, res) => {
 //             res.status(500).json({ message: 'Error uploading image' });
 //         }
 //     });
+
+
+// app.post("/create-subscription", async (req, res) => {
+//   try {
+//     const { customer_name, customer_email, customer_phone, plan_id } = req.body;
+
+//     // unique subscription id for every request
+//     const subscriptionId = `sub_${Date.now()}`;
+
+//     const payload = {
+//       subscription_id: subscriptionId,
+//       plan_details: {
+//         plan_id: plan_id || "plan_test", // from Cashfree Dashboard
+//         plan_note: "Monthly UPI AutoPay plan",
+//       },
+//       authorization_details: {
+//         payment_methods: ["upi"], // can also add ["card", "netbanking"] etc
+//       },
+//       customer_details: {
+//         customer_name: customer_name || "Test User",
+//         customer_email: customer_email || "test@example.com",
+//         customer_phone: customer_phone || "9876543210",
+//       },
+//       return_url: "https://your-server.example.com/subscription-return",
+//     };
+
+//     console.log("📤 Subscription Payload:", payload);
+
+//     const r = await axios.post(
+//       "https://sandbox.cashfree.com/pg/subscriptions",
+//       payload,
+//       {
+//         headers: {
+//           "Content-Type": "application/json",
+//           "x-client-id": CLIENT_ID,
+//           "x-client-secret": CLIENT_SECRET,
+//           "x-api-version": API_VERSION,
+//           "x-request-id": uuidv4()
+//         },
+//       }
+//     );
+
+//     console.log("✅ Cashfree Response:", r.data);
+//     return res.json({ status: true, data: r.data });
+//   } catch (err) {
+//     console.error(
+//       "❌ create-subscription error:",
+//       err?.response?.data || err.message
+//     );
+//     return res
+//       .status(500)
+//       .json({ status: false, error: err?.response?.data || err.message });
+//   }
+// });
+
+// const CLIENT_ID = "YOUR_CLIENT_ID";
+// const CLIENT_SECRET = "YOUR_CLIENT_SECRET";
+// const API_VERSION = "2022-09-01"; // as per Cashfree docs
+const CASHFREE_BASE = "https://sandbox.cashfree.com/pg/subscriptions";
+
+app.post("/create-subscription", async (req, res) => {
+  console.log(CLIENT_ID,CLIENT_SECRET,API_VERSION,"sdsd");
+  try {
+    const { plan_id, customer_name, customer_email, customer_phone } = req.body;
+
+    const payload = {
+      subscription_id: `sub_${Date.now()}`,
+      plan_details: {
+        plan_id,
+        plan_note: "Monthly UPI AutoPay plan",
+      },
+      authorization_details: {
+        payment_methods: ["upi"], // you can add "debitcard"/"creditcard" if needed
+      },
+      customer_details: {
+        customer_name,
+        customer_email,
+        customer_phone,
+      },
+      return_url: "https://your-server.example.com/subscription-return",
+    };
+
+    const response = await axios.post(CASHFREE_BASE, payload, {
+      headers: {
+        "Content-Type": "application/json",
+        "x-client-id": CLIENT_ID,
+        "x-client-secret": CLIENT_SECRET,
+        "x-api-version": API_VERSION,
+        "x-request-id": uuidv4(),
+      },
+    });
+
+    return res.json(response.data); // returns subscription_id + subscription_session_id
+  } catch (err) {
+    console.error("Error:", err?.response?.data || err.message);
+    return res.status(500).json({ error: err?.response?.data || err.message });
+  }
+});
+
+
+
 
 app.post("/upload", upload.single("image"), (req, res) => {
   if (!req.file) {

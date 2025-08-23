@@ -1,5 +1,12 @@
 const mongoose = require("mongoose");
-
+const OtpSchema = new mongoose.Schema({
+  codeHash: { type: String },     // hashed OTP
+  expiresAt: { type: Date }       // expiry time
+}, { _id: false });
+const ResetTokenSchema = new mongoose.Schema({
+  token: { type: String },
+  expiresAt: { type: Date }
+}, { _id: false });
 const userSchema = mongoose.Schema(
   {
     name: {
@@ -15,10 +22,13 @@ const userSchema = mongoose.Schema(
       type: String,
       default: "",
     },
+    resetToken: ResetTokenSchema,
+
     balance: {
       type: String,
       default: 0,
     },
+    otp: OtpSchema,
     balanceINR: {
       type: String,
       default: 0,
@@ -33,10 +43,8 @@ const userSchema = mongoose.Schema(
     referralCode: {
       type: String,
     },
-    otp: {
-      type: String,
-    },
-    otpExpiry:{
+
+    otpExpiry: {
       type: String
     },
     lastLogin: {
@@ -45,11 +53,11 @@ const userSchema = mongoose.Schema(
     role: {
       type: String,
       default: "user",
-    },transactionPin: {
-  type: String,
-  default: null
-}
-,
+    }, transactionPin: {
+      type: String,
+      default: null
+    }
+    ,
 
     phone: {
       type: String,
@@ -58,6 +66,9 @@ const userSchema = mongoose.Schema(
       default: "",
     },
     isBlocked: {
+      type: Boolean,
+      default: false,
+    },  activeAccount: {
       type: Boolean,
       default: false,
     },
