@@ -1,0 +1,133 @@
+const mongoose = require("mongoose");
+const OtpSchema = new mongoose.Schema({
+  codeHash: { type: String },     // hashed OTP
+  expiresAt: { type: Date }       // expiry time
+}, { _id: false });
+const ResetTokenSchema = new mongoose.Schema({
+  token: { type: String },
+  expiresAt: { type: Date }
+}, { _id: false });
+
+const panSchema = new mongoose.Schema({
+  pan: { type: String },
+  type: { type: String },
+  reference_id: { type: Number },
+  name_provided: { type: String },
+  registered_name: { type: String },
+  father_name: { type: String },
+  valid: { type: Boolean },
+  message: { type: String },
+})
+const bankSchema = new mongoose.Schema({
+  reference_id: { type: Number },
+  name_at_bank: { type: String },
+  bank_name: { type: String },
+  city: { type: String },
+  micr: { type: Number },
+  branch: { type: String },
+  account_status: { type: String },
+  account_status_code: { type: String },
+  ifsc_details: {
+    bank: { type: String },
+    ifsc: { type: String },
+    micr: { type: Number },
+    nbin: { type: String },
+    address: { type: String },
+    city: { type: String },
+    state: { type: String },
+    branch: { type: String },
+    ifsc_subcode: { type: String },
+    category: { type: String },
+    swift_code: { type: String },
+  },
+})
+const userSchema = mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: [true, "Please add a username"],
+    },
+    email: {
+      type: String,
+      required: [true, "Please add an email"],
+      unique: [true, "Please add a valid email"],
+    },
+    profilePhoto: {
+      type: String,
+      default: "",
+    },
+    resetToken: ResetTokenSchema,
+
+    balance: {
+      type: String,
+      default: 0,
+    },
+    otp: OtpSchema,
+    balanceINR: {
+      type: String,
+      default: 0,
+    },
+    goldBalance: {
+      type: String,
+      default: 0,
+    },
+    appId: {
+      type: String,
+    },
+    referralCode: {
+      type: String,
+    },
+
+    otpExpiry: {
+      type: String
+    },
+    lastLogin: {
+      type: Date,
+    },
+    role: {
+      type: String,
+      default: "user",
+    }, transactionPin: {
+      type: String,
+      default: null
+    }
+    ,
+
+    phone: {
+      type: String,
+
+      required: [true, "Please add a phone"],
+      default: "",
+    },
+    isBlocked: {
+      type: Boolean,
+      default: false,
+    }, activeAccount: {
+      type: Boolean,
+      default: false,
+    },
+    password: {
+      type: String,
+      required: [true, "Please add a password"],
+    },
+
+    active: {
+      type: Boolean,
+      default: true,
+    }, panVerified: {
+      type: Boolean,
+      default: false,
+    }, panDetails: panSchema,
+    bankDetails: [bankSchema],
+    level: [
+      {
+        type: String,
+        enum: ["Beginner", "Intermediate", "Pro"],
+        default: "Beginner",
+      },
+    ],
+  },
+  { timestamp: true, toJSON: { virtuals: true } }
+);
+
+module.exports = mongoose.model("Users", userSchema);

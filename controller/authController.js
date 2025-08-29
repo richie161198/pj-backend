@@ -1,0 +1,514 @@
+const asyncHandler = require("express-async-handler");
+// const crypto = require("../helpers/crypto");
+const helper = require("../helpers/helpers");
+const multer = require("multer");
+const { generateToken, hashValue, compareValue, isEmail } = require("../helpers/helpers");
+// const User = require("../models/userModel");
+// const adminModel = require("../models/admin_model");
+const userModel = require("../models/userModel");
+const bcrypt = require("bcryptjs");
+const { sendMail, sendEmail } = require("../helpers/mailer");
+const crypto = require("crypto");
+const { default: axios } = require("axios");
+const dotenv = require("dotenv").config();
+
+const signUpRequest = asyncHandler(async (req, res) => {
+  const { name, email, phone, password, referredBy } = req.body;
+
+  if (!name || !email || !password) {
+    res.status(400);
+    throw new Error("Please enter all fields");
+  }
+  try {
+    const userAvailable = await userModel.findOne({ email });
+
+    if (userAvailable) {
+      res.status(400);
+      throw new Error("User already exists");
+    } else {
+
+      const hashedPassword = await bcrypt.hash(password, 12);
+      const referralCode = helper.referral();
+      const appId = helper.appId();
+
+      const otp = helper.generateNumericOtp();
+      const codeHash = await hashValue(otp);
+
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+
+
+      console.log(email, otp, referralCode, appId);
+
+      const htmlContent = `
+      <h2>Account activation Code</h2>
+      <p>Dear ${name || "User"},</p>
+      <p>Your OTP for password reset is: <strong>${otp}</strong></p>
+      <p>This code will expire in 10 minutes.</p>
+    `;
+
+      await sendEmail(email, "Account activation Code", htmlContent, name);
+      const user = await userModel.create({
+        name,
+        email,
+        otp: { codeHash, expiresAt },
+        referralCode: referralCode,
+        referredBy: referredBy,
+        appId: appId,
+        phone,
+        password: hashedPassword,
+      });
+
+      if (user) {
+        res.status(200).json({
+          status: true,
+          message: "We have sent otp your email to verify it",
+          data: {
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+          },
+        });
+      } else {
+        res.status(400).json({ message: "failed - please try again" });
+      }
+    }
+
+
+  } catch (error) {
+    res.status(400).json({ message: "failed - please try again" });
+
+    console.log("err signup: ", error);
+  }
+});
+
+const signInRequest = asyncHandler(async (req, res) => {
+  console.log(req.headers);
+
+  const { email, password } = req.body;
+  console.log(req.body);
+  console.log(email, password);
+
+  if (!email || !password) {
+    res.status(400);
+    throw new Error("Please enter all fields");
+  }
+  const user = await userModel.findOne({ email });
+
+  if (!user) {
+    res.status(400);
+    throw new Error("User not found");
+  }
+  const userAvailable = await bcrypt.compare(password, user.password);
+  if (!userAvailable) {
+    res.status(400);
+    throw new Error("Invalid password");
+  }
+  console.log("approved");
+
+  user.lastLogin = new Date();
+  await user.save();
+  const accessToken = generateToken({
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    },
+  });
+
+  res.status(200).json({
+    status: "success",
+    token: accessToken,
+  });
+});
+
+const mail = async (req, res) => {
+  try {
+    const data = sendMail(req.body.to, req.body.subject, req.body.text);
+    if (data == true)
+      res.status(200).json({ message: "successfully send mail" });
+    if (data == false) res.status(404).json({ message: "Failed to send mail" });
+  } catch (error) {
+    res.status(404).json({ message: "failed", err: error });
+  }
+};
+
+// Forgot Password Request
+const SendOTP = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  console.log("Forgot Password Request for:", email);
+  if (!email) {
+    res.status(400);
+    throw new Error("Email is required");
+  }
+
+  try {
+    const user = await userModel.findOne({ email });
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    // Generate OTP
+    const otp = helper.generateOTP();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
+    console.log("OTP:", otp, "Expiry:", otpExpiry);
+    // Send Email
+    const htmlContent = `
+      <h2>Password Reset OTP</h2>
+      <p>Dear ${user.name || "User"},</p>
+      <p>Your OTP for password reset is: <strong>${otp}</strong></p>
+      <p>This code will expire in 10 minutes.</p>
+    `;
+
+    await sendEmail(email, "Password Reset OTP", htmlContent, user.name);
+
+    user.otp = otp;
+    user.otpExpiry = otpExpiry;
+    await user.save();
+
+    res.status(200).json({
+      status: true,
+      message: "OTP sent to your email for password reset",
+    });
+  } catch (error) {
+    console.error("Error in forgot password:", error);
+    res.status(500).json({ error: "Failed to send OTP" });
+  }
+});
+
+
+
+const verifyPan = asyncHandler(async (req, res) => {
+  const { pan, name } = req.body;
+  if (!name || !name) {
+    res.status(400).json({ message: "Please provide all fields" });
+  }
+  try {
+    const user = await userModel.findById(req.user.id);
+    console.log("user", user);
+    if (!user) {
+      res.status(404).json({ message: "User not found" });
+    }
+    const response = await axios.post(
+      'https://api.cashfree.com/verification/pan',
+      { pan, name },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-client-id': process.env.PAN_ID,
+          'x-client-secret': process.env.PAN_SECRET,
+        },
+      }
+    );
+    console.log(response.data, response.status, "response.status");
+    if (response.status == 200) {
+      if (response.data.valid == true) {
+
+        user.panDetails = response.data;
+        user.panVerified = response.data.valid;
+        await user.save();
+        res.status(200).json({
+          status: true,
+          message: "PAN verified successfully",
+          details: response.data
+        });
+      } else {
+        res.status(200).json({
+          status: false,
+          message: "Invalid PAN CARD information ",
+          details: response.data
+        });
+      }
+
+
+    } else {
+      res.json({
+        status: false,
+        message: "something went wrong",
+      });
+    }
+  } catch (err) {
+
+    console.error(err.response?.data || err.message);
+    res.status(err.response?.status || 500).json(err.response?.data || { error: err.message });
+
+  }
+});
+
+const verifyBankAccount = asyncHandler(async (req, res) => {
+  const { bank_account, ifsc, name, phone } = req.body;
+  console.log(bank_account, ifsc, name, "verifyBankAccount");
+  if (!bank_account || !ifsc || !name) {
+    res.status(400).json({ message: "Please provide all fields" });
+  }
+  try {
+    const user = await userModel.findById(req.user.id);
+    console.log("user", user);
+    if (!user) {
+      res.status(404).json({ message: "User not found" });
+    }
+
+    const payload = {
+      bank_account,
+      ifsc,
+      name, phone
+    };
+
+    const response = await axios.post(
+      `https://api.cashfree.com/verification/bank-account/sync`,
+      payload,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "x-client-id": process.env.PAN_ID,
+          "x-client-secret": process.env.PAN_SECRET,
+          "x-api-version": "2022-09-01"
+        }
+      }
+    );
+
+
+
+    console.log(response.data, response.status, "response.status");
+    if (response.status == 200) {
+
+      // if (response.data.account_status == "VALID") {
+        if (response.data.status == true) {
+        user.bankDetails.push(response.data);
+        // user.panVerified = response.data.valid;
+        await user.save();
+        res.status(200).json({
+          status: true,
+          message: "Bank Account verified successfully",
+          details: response.data
+        });
+      } else {
+        res.status(200).json({
+          status: false,
+          message: "Bank Account information failed ",
+          details: response.data
+        });
+      }
+
+
+    } else {
+      res.json({
+        status: false,
+        message: "something went wrong",
+      });
+    }
+  } catch (err) {
+
+    console.error(err.response?.data || err.message);
+    res.status(err.response?.status || 500).json(err.response?.data || { error: err.message });
+
+  }
+});
+
+const forgotPasswordRequest = asyncHandler(async (req, res) => {
+  try {
+    const { email } = req.body;
+    console.log("mm", email);
+    const user = await userModel.findOne({ email });
+
+    // if (!isEmail(email)) return res.status(400).json({ message: 'Invalid email' });
+    if (user) {
+
+
+      const otp = helper.generateNumericOtp();
+      const codeHash = await hashValue(otp);
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+      console.log(otp,
+        codeHash,
+        expiresAt)
+      user.otp = { codeHash, expiresAt };
+      user.resetToken = null;
+      await user.save();
+
+      console.log("email,otp", email, otp);
+      await sendEmail(
+        email,
+        "Your OTP Code",
+        `<h2>Your OTP is: <b>${otp}</b></h2><p>Valid for 5 minutes</p>`,
+        user.name
+      );
+
+      return res.json({ message: `Hi ${user.name} OTP has been sent to registered mail id .` });
+    }
+  } catch (e) {
+    console.log(e);
+    res.status(500).json({ message: "Error in forgot password", error: e });
+  }
+});
+const verifyOtp = asyncHandler(async (req, res) => {
+  try {
+    const { email, otp } = req.body || {};
+    if (!isEmail(email) || !otp) return res.status(400).json({ message: 'Invalid payload' });
+
+    const user = await userModel.findOne({ email });
+
+    if (user) {
+
+      if (!user || !user.otp?.codeHash || !user.otp?.expiresAt) {
+        return res.status(400).json({ message: 'Invalid or expired OTP' });
+      }
+
+      if (user.otp.expiresAt < new Date()) {
+        user.otp = null;
+        await user.save();
+        return res.status(400).json({ message: 'Expired OTP' });
+      }
+
+      const ok = await compareValue(otp, user.otp.codeHash);
+      if (!ok) return res.status(400).json({ message: 'Invalid  OTP' });
+
+      // OTP valid → issue a reset token and clear OTP
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 min
+      user.resetToken = { token, expiresAt };
+      user.otp = undefined;
+      await user.save();
+
+      return res.json({ resetToken: token, expiresInMinutes: 15 });
+    } else {
+      res.status(400).json({ message: "User can't found" });
+    }
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+const activateAccount = asyncHandler(async (req, res) => {
+  try {
+    const { email, otp } = req.body || {};
+    if (!isEmail(email) || !otp) return res.status(400).json({ message: 'Invalid payload' });
+
+    const user = await userModel.findOne({ email });
+
+    if (user) {
+      console.log("user", user)
+      if (!user || !user.otp?.codeHash || !user.otp?.expiresAt) {
+        return res.status(400).json({ message: 'Invalid or expired OTP' });
+      }
+
+      if (user.otp.expiresAt < new Date()) {
+        user.otp = null;
+        await user.save();
+        return res.status(400).json({ message: 'Expired OTP' });
+      }
+
+      const ok = await compareValue(otp, user.otp.codeHash);
+      if (!ok) return res.status(400).json({ message: 'Invalid  OTP' });
+
+      user.activeAccount = true;
+      await user.save();
+      const accessToken = generateToken({
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        },
+      });
+
+
+      return res.status(200).json({
+        status: "success",
+        message: "account activated",
+        token: accessToken,
+      });
+    } else {
+      res.status(400).json({ message: "User can't found" });
+    }
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+const updatePassword = asyncHandler(async (req, res) => {
+  try {
+    const { email, resetToken, newPassword } = req.body || {};
+    if (!isEmail(email) || !resetToken) {
+      return res.status(400).json({ message: 'Invalid payload' });
+    }
+
+    const user = await userModel.findOne({ email });
+
+    if (user) {
+
+      console.log(user);
+      if (!user || !user.resetToken?.token || !user.resetToken?.expiresAt) {
+        return res.status(400).json({ message: 'Invalid or expired token' });
+      }
+
+      if (user.resetToken.expiresAt < new Date()) {
+        user.resetToken = undefined;
+        await user.save();
+        return res.status(400).json({ message: 'Expired token' });
+      }
+
+      if (user.resetToken.token !== resetToken) {
+        return res.status(400).json({ message: 'Invalid or expired token' });
+      }
+
+      console.log("password", newPassword);
+
+      console.log("bf password", user.password);
+      const passwordHash = await bcrypt.hash(newPassword, 12);
+
+      console.log("af passwordHash", passwordHash);
+      user.password = passwordHash;
+      user.passwordChangedAt = new Date();
+      user.resetToken = null; // consume token
+      await user.save();
+      console.log("user", user);
+
+      return res.json({ message: 'Password reset successful' });
+    } else {
+      res.status(400).json({ message: "User can't found" });
+
+    }
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+
+// const adminSignUpRequest = async (req, res) => {
+//     const { name, email, password } = req.body;
+
+//     try {
+//         if (!name || !email || !password) return res.status(403).json({ status: false, message: "All fields must be provided" });
+//         const adminExist = await adminModel.findOne({ email })
+//         if (adminExist) {
+//             res.status(400);
+//             throw new Error("Admin already exists");
+//         } else {
+//             const hashedPassword = await bcrypt.hash(password, 10);
+//             const admin = await adminModel.create({ name, email, hashedPassword });
+
+//             res.status(200).json({ status: true, message: "Created successfully", details: admin });
+
+//         }
+//     } catch (error) {
+
+//         res.status(400).json({ message: error.message });
+//         // throw Error();
+
+//     }
+
+// }
+
+module.exports = {
+  signUpRequest,
+  signInRequest,
+  verifyPan,
+  verifyOtp, updatePassword, activateAccount, verifyBankAccount,
+  SendOTP,
+  mail, forgotPasswordRequest
+  // adminSignInRequest
+};
