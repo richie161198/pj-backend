@@ -21,6 +21,7 @@ const panSchema = new mongoose.Schema({
 const bankSchema = new mongoose.Schema({
   reference_id: { type: Number },
   name_at_bank: { type: String },
+  account_number: { type: String },
   bank_name: { type: String },
   city: { type: String },
   micr: { type: Number },
@@ -41,6 +42,18 @@ const bankSchema = new mongoose.Schema({
     swift_code: { type: String },
   },
 })
+
+const mobileOtpSchema = new mongoose.Schema(
+  {
+    codeHash: { type: String },
+    expiresAt: { type: Date },
+    attempts: { type: Number, default: 0 }, // verification attempts
+    lastSentAt: { type: Date, default: null }, // last OTP request time
+    requestCount: { type: Number, default: 0 }, // OTPs sent in the window
+  },
+  { _id: false }
+);
+
 const userSchema = mongoose.Schema(
   {
     name: {
@@ -84,6 +97,7 @@ const userSchema = mongoose.Schema(
     lastLogin: {
       type: Date,
     },
+    mobileOtp: mobileOtpSchema,
     role: {
       type: String,
       default: "user",
@@ -117,7 +131,12 @@ const userSchema = mongoose.Schema(
     }, panVerified: {
       type: Boolean,
       default: false,
-    }, panDetails: panSchema,
+    },  mobileVerified: {
+      type: Boolean,
+      default: false,
+    },
+    
+    panDetails: panSchema,
     bankDetails: [bankSchema],
     level: [
       {

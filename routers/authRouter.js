@@ -13,6 +13,8 @@ const {
   activateAccount,
   verifyPan,
   verifyBankAccount,
+  sendMobileOtp,
+  verifyMobileOtp,
   // adminSignInRequest
   // sendLoginOtp,
   // verifyOtp,
@@ -23,6 +25,8 @@ router.route("/login").post(signInRequest);
 router.route("/forgotPasswordRequest").post(forgotPasswordRequest);
 router.route("/SendOTP").post(SendOTP);
 router.route("/verifyOtp").post(verifyOtp);
+router.route("/sendMobileOtp").post(sendMobileOtp);
+router.route("/verifyMobileOtp").post(verifyMobileOtp);
 router.route("/updatePassword").post(updatePassword);
 router.route("/activateAccount").post(activateAccount);
 router.route("/verifypan").post(isAuth,verifyPan);

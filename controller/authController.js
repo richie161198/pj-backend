@@ -11,7 +11,12 @@ const { sendMail, sendEmail } = require("../helpers/mailer");
 const crypto = require("crypto");
 const { default: axios } = require("axios");
 const dotenv = require("dotenv").config();
+const twilio = require("twilio");
 
+const client = twilio(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN
+);
 const signUpRequest = asyncHandler(async (req, res) => {
   const { name, email, phone, password, referredBy } = req.body;
 
@@ -191,6 +196,16 @@ const verifyPan = asyncHandler(async (req, res) => {
     if (!user) {
       res.status(404).json({ message: "User not found" });
     }
+
+
+       const alreadyVerified = user.panVerified ==true
+
+  if (alreadyVerified) {
+    return res.status(201).json({
+      status: false,
+      message: "Pan Number already verified",
+    });
+  }
     const response = await axios.post(
       'https://api.cashfree.com/verification/pan',
       { pan, name },
@@ -215,7 +230,7 @@ const verifyPan = asyncHandler(async (req, res) => {
           details: response.data
         });
       } else {
-        res.status(200).json({
+        res.status(203).json({
           status: false,
           message: "Invalid PAN CARD information ",
           details: response.data
@@ -224,7 +239,7 @@ const verifyPan = asyncHandler(async (req, res) => {
 
 
     } else {
-      res.json({
+      res.status(203).json({
         status: false,
         message: "something went wrong",
       });
@@ -238,11 +253,13 @@ const verifyPan = asyncHandler(async (req, res) => {
 });
 
 const verifyBankAccount = asyncHandler(async (req, res) => {
-  const { bank_account, ifsc, name, phone } = req.body;
-  console.log(bank_account, ifsc, name, "verifyBankAccount");
-  if (!bank_account || !ifsc || !name) {
+  const { bank_account, ifsc,name } = req.body;
+  console.log(bank_account, ifsc, "verifyBankAccount");
+  if (!bank_account || !ifsc) {
     res.status(400).json({ message: "Please provide all fields" });
   }
+
+ 
   try {
     const user = await userModel.findById(req.user.id);
     console.log("user", user);
@@ -250,10 +267,22 @@ const verifyBankAccount = asyncHandler(async (req, res) => {
       res.status(404).json({ message: "User not found" });
     }
 
+      const alreadyExists = user.bankDetails.some(
+    (detail) =>
+      detail.account_number === bank_account
+  );
+
+  if (alreadyExists) {
+    return res.status(201).json({
+      status: false,
+      message: "Bank account already added",
+    });
+  }
+
     const payload = {
       bank_account,
       ifsc,
-      name, phone
+      name
     };
 
     const response = await axios.post(
@@ -274,9 +303,21 @@ const verifyBankAccount = asyncHandler(async (req, res) => {
     console.log(response.data, response.status, "response.status");
     if (response.status == 200) {
 
-      // if (response.data.account_status == "VALID") {
-        if (response.data.status == true) {
-        user.bankDetails.push(response.data);
+      if (response.data.account_status == "VALID") {
+        // if (response.data.status == true) {
+        // user.bankDetails.push(user.bankDetails.account_number = bank_account, response.data);
+        user.bankDetails.push({
+          reference_id: response.data.reference_id,
+          name_at_bank: response.data.name_at_bank,
+          account_number: bank_account,
+          bank_name: response.data.bank_name,
+          city: response.data.city,
+          micr: response.data.micr,
+          branch: response.data.branch,
+          account_status: response.data.account_status,
+          account_status_code: response.data.account_status_code,
+          ifsc_details: response.data.ifsc_details,
+        });
         // user.panVerified = response.data.valid;
         await user.save();
         res.status(200).json({
@@ -285,9 +326,9 @@ const verifyBankAccount = asyncHandler(async (req, res) => {
           details: response.data
         });
       } else {
-        res.status(200).json({
+        res.status(203).json({
           status: false,
-          message: "Bank Account information failed ",
+          message: "Invalid Bank Account failed ",
           details: response.data
         });
       }
@@ -477,6 +518,114 @@ const updatePassword = asyncHandler(async (req, res) => {
   }
 });
 
+const OTP_REQUEST_LIMIT = 3; // max 3 OTPs in 15 minutes
+const OTP_WINDOW = 15 * 60 * 1000; // 15 mins in ms
+
+const sendMobileOtp = asyncHandler(async (req, res) => {
+  const { phone } = req.body;
+  if (!phone) return res.status(400).json({ error: "Phone is required" });
+
+  const otp = helper.generateOTP(); // e.g., 6-digit number
+  const codeHash = crypto.createHash("sha256").update(otp).digest("hex");
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+console.log(otp,codeHash,expiresAt);
+  // find the user by phone
+  let user = await userModel.findOne({ phone });
+  if (!user) {
+    return res.status(404).json({ error: "User not found" });
+  }
+
+  // Initialize `mobileOtp` if not present
+  if (!user.mobileOtp) {
+    user.mobileOtp = {};
+  }
+
+  const now = Date.now();
+
+  // reset window if older than 15 mins
+  if (
+    !user.mobileOtp.lastSentAt ||
+    now - new Date(user.mobileOtp.lastSentAt).getTime() > OTP_WINDOW
+  ) {
+    user.mobileOtp.requestCount = 0;
+  }
+
+  if (user.mobileOtp.requestCount >= OTP_REQUEST_LIMIT) {
+    return res.status(429).json({
+      error: `Too many OTP requests. Please try again after 15 minutes.`,
+    });
+  }
+
+  // update otp details
+  user.mobileOtp.codeHash = codeHash;
+  user.mobileOtp.expiresAt = expiresAt;
+  user.mobileOtp.lastSentAt = new Date();
+  user.mobileOtp.attempts = 0; // reset attempts
+  user.mobileOtp.requestCount = (user.mobileOtp.requestCount || 0) + 1;
+
+  await user.save();
+
+  try {
+    await client.messages.create({
+      body: `Your OTP is ${otp}. It expires in 5 minutes.`,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: phone.startsWith("+") ? phone : `+91${phone}`,
+    });
+
+    return res.json({ success: true, message: "OTP sent successfully" });
+  } catch (err) {
+    console.error("❌ SMS failed:", err.message);
+    return res.status(500).json({ error: "Failed to send OTP" ,message:err});
+  }
+});
+
+
+
+const MAX_ATTEMPTS = 3;
+
+
+const verifyMobileOtp = asyncHandler(async (req, res) => {
+  const { phone, otp } = req.body;
+  if (!phone || !otp) {
+    return res.status(400).json({ error: "Phone & OTP required" });
+  }
+
+  const user = await userModel.findOne({ phone });
+  if (!user || !user.mobileOtp) {
+    return res.status(400).json({ error: "OTP not found" });
+  }
+
+  const { codeHash, expiresAt, attempts } = user.mobileOtp;
+
+  // check attempts
+  if (attempts >= MAX_ATTEMPTS) {
+    return res
+      .status(403)
+      .json({ error: "Too many failed attempts. Request a new OTP." });
+  }
+
+  // check expiry
+  if (expiresAt < new Date()) {
+    return res.status(400).json({ error: "OTP expired" });
+  }
+
+  const inputHash = crypto.createHash("sha256").update(otp).digest("hex");
+
+  if (codeHash !== inputHash) {
+    user.mobileOtp.attempts += 1;
+    await user.save();
+    return res.status(400).json({ error: "Invalid OTP" });
+  }
+
+  // ✅ OTP success → clear OTP data
+  user.mobileOtp = undefined;
+  user.mobileVerified = true; // optional: mark account active after verification
+  await user.save();
+
+  return res.json({ success: true, message: "OTP verified successfully" });
+});
+
+
 
 // const adminSignUpRequest = async (req, res) => {
 //     const { name, email, password } = req.body;
@@ -509,6 +658,6 @@ module.exports = {
   verifyPan,
   verifyOtp, updatePassword, activateAccount, verifyBankAccount,
   SendOTP,
-  mail, forgotPasswordRequest
+  mail, forgotPasswordRequest,sendMobileOtp,verifyMobileOtp
   // adminSignInRequest
 };
