@@ -342,6 +342,8 @@ app.use("/api/v0/commerce", require("./routers/productRouter"));
 
 // app.use(errorHandler);
 
+// current file //
+
 server.listen(process.env.PORT, () => {
   console.log(`Server on ${process.env.PORT} `);
 });
