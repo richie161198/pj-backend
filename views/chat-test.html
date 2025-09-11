@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat System Test</title>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+            height: 80vh;
+        }
+        .sidebar {
+            width: 300px;
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .chat-area {
+            flex: 1;
+            background: white;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .chat-header {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            background: #f8f9fa;
+            border-radius: 8px 8px 0 0;
+        }
+        .messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            max-height: 400px;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 70%;
+        }
+        .message.sent {
+            background: #007bff;
+            color: white;
+            margin-left: auto;
+        }
+        .message.received {
+            background: #e9ecef;
+            color: #333;
+        }
+        .message.admin {
+            background: #28a745;
+            color: white;
+            text-align: center;
+            max-width: 100%;
+        }
+        .message-input {
+            padding: 20px;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 10px;
+        }
+        .message-input input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .message-input button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .message-input button:hover {
+            background: #0056b3;
+        }
+        .user-list {
+            margin-bottom: 20px;
+        }
+        .user-item {
+            padding: 10px;
+            margin: 5px 0;
+            background: #f8f9fa;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .user-item:hover {
+            background: #e9ecef;
+        }
+        .user-item.active {
+            background: #007bff;
+            color: white;
+        }
+        .online-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #28a745;
+        }
+        .offline-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #6c757d;
+        }
+        .typing-indicator {
+            font-style: italic;
+            color: #6c757d;
+            font-size: 12px;
+        }
+        .login-form {
+            max-width: 400px;
+            margin: 50px auto;
+            padding: 30px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .login-form input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .login-form button {
+            width: 100%;
+            padding: 12px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .admin-controls {
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff3cd;
+            border-radius: 4px;
+            border: 1px solid #ffeaa7;
+        }
+        .admin-controls h4 {
+            margin: 0 0 10px 0;
+            color: #856404;
+        }
+        .admin-controls input, .admin-controls select {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .admin-controls button {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div id="loginForm" class="login-form">
+        <h2>Chat System Test</h2>
+        <input type="text" id="email" placeholder="Email" value="test@example.com">
+        <input type="password" id="password" placeholder="Password" value="password123">
+        <button onclick="login()">Login</button>
+        <div id="loginStatus"></div>
+    </div>
+
+    <div id="chatContainer" style="display: none;">
+        <div class="container">
+            <div class="sidebar">
+                <h3>Users</h3>
+                <div id="userList" class="user-list"></div>
+                
+                <div id="adminControls" class="admin-controls" style="display: none;">
+                    <h4>Admin Controls</h4>
+                    <input type="text" id="broadcastMessage" placeholder="Broadcast message">
+                    <button onclick="sendBroadcast()">Send Broadcast</button>
+                    
+                    <select id="targetUser">
+                        <option value="">Select user for direct message</option>
+                    </select>
+                    <input type="text" id="directMessage" placeholder="Direct message">
+                    <button onclick="sendDirectMessage()">Send Direct Message</button>
+                </div>
+            </div>
+
+            <div class="chat-area">
+                <div class="chat-header">
+                    <h3 id="chatTitle">Select a user to start chatting</h3>
+                    <div id="connectionStatus" class="status disconnected">Disconnected</div>
+                </div>
+                
+                <div id="messages" class="messages"></div>
+                
+                <div class="message-input">
+                    <input type="text" id="messageInput" placeholder="Type a message..." disabled>
+                    <button onclick="sendMessage()" disabled id="sendButton">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let socket = null;
+        let currentUser = null;
+        let selectedUserId = null;
+        let authToken = null;
+
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const statusDiv = document.getElementById('loginStatus');
+
+            try {
+                const response = await fetch('/api/v0/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    authToken = data.data.token;
+                    currentUser = data.data.user;
+                    
+                    document.getElementById('loginForm').style.display = 'none';
+                    document.getElementById('chatContainer').style.display = 'block';
+                    
+                    initializeSocket();
+                    loadUsers();
+                } else {
+                    statusDiv.innerHTML = `<div style="color: red;">Login failed: ${data.message}</div>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div style="color: red;">Error: ${error.message}</div>`;
+            }
+        }
+
+        function initializeSocket() {
+            socket = io('http://localhost:5000', {
+                auth: {
+                    token: authToken
+                }
+            });
+
+            socket.on('connect', () => {
+                console.log('Connected to chat server');
+                updateConnectionStatus(true);
+            });
+
+            socket.on('disconnect', () => {
+                console.log('Disconnected from chat server');
+                updateConnectionStatus(false);
+            });
+
+            socket.on('new_message', (data) => {
+                console.log('New message received:', data);
+                addMessage(data.data, 'received');
+            });
+
+            socket.on('message_sent', (data) => {
+                console.log('Message sent:', data);
+                addMessage(data.data, 'sent');
+            });
+
+            socket.on('user_typing', (data) => {
+                console.log('User typing:', data);
+                showTypingIndicator(data);
+            });
+
+            socket.on('user_status_update', (data) => {
+                console.log('User status update:', data);
+                updateUserStatus(data.userId, data.isOnline);
+            });
+
+            socket.on('admin_broadcast', (data) => {
+                console.log('Admin broadcast:', data);
+                addMessage({
+                    message: data.data.message,
+                    sender: { name: data.data.sentBy },
+                    createdAt: data.data.sentAt
+                }, 'admin');
+            });
+
+            socket.on('error', (data) => {
+                console.error('Socket error:', data);
+                alert('Error: ' + data.message);
+            });
+        }
+
+        async function loadUsers() {
+            try {
+                const response = await fetch('/api/v0/chat/online-users', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayUsers(data.data);
+                }
+            } catch (error) {
+                console.error('Error loading users:', error);
+            }
+        }
+
+        function displayUsers(users) {
+            const userList = document.getElementById('userList');
+            const targetUserSelect = document.getElementById('targetUser');
+            
+            userList.innerHTML = '';
+            targetUserSelect.innerHTML = '<option value="">Select user for direct message</option>';
+
+            users.forEach(user => {
+                if (user.user._id !== currentUser._id) {
+                    const userItem = document.createElement('div');
+                    userItem.className = 'user-item';
+                    userItem.innerHTML = `
+                        <span>${user.user.name}</span>
+                        <div class="${user.isOnline ? 'online-indicator' : 'offline-indicator'}"></div>
+                    `;
+                    userItem.onclick = () => selectUser(user.user._id, user.user.name);
+                    userList.appendChild(userItem);
+
+                    const option = document.createElement('option');
+                    option.value = user.user._id;
+                    option.textContent = user.user.name;
+                    targetUserSelect.appendChild(option);
+                }
+            });
+
+            // Show admin controls if user is admin
+            if (currentUser.role === 'admin') {
+                document.getElementById('adminControls').style.display = 'block';
+            }
+        }
+
+        function selectUser(userId, userName) {
+            selectedUserId = userId;
+            document.getElementById('chatTitle').textContent = `Chat with ${userName}`;
+            document.getElementById('messageInput').disabled = false;
+            document.getElementById('sendButton').disabled = false;
+            
+            // Update active user in UI
+            document.querySelectorAll('.user-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.target.closest('.user-item').classList.add('active');
+            
+            // Clear messages and load conversation
+            document.getElementById('messages').innerHTML = '';
+            loadConversation(userId);
+        }
+
+        async function loadConversation(userId) {
+            try {
+                const response = await fetch(`/api/v0/chat/conversation/${userId}/messages`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    data.data.forEach(message => {
+                        const messageType = message.sender._id === currentUser._id ? 'sent' : 'received';
+                        addMessage(message, messageType);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading conversation:', error);
+            }
+        }
+
+        function sendMessage() {
+            const messageInput = document.getElementById('messageInput');
+            const message = messageInput.value.trim();
+
+            if (message && selectedUserId && socket) {
+                socket.emit('send_message', {
+                    receiverId: selectedUserId,
+                    message: message,
+                    messageType: 'text'
+                });
+                messageInput.value = '';
+            }
+        }
+
+        function sendBroadcast() {
+            const message = document.getElementById('broadcastMessage').value.trim();
+            
+            if (message && socket) {
+                socket.emit('admin_broadcast', {
+                    message: message,
+                    messageType: 'text'
+                });
+                document.getElementById('broadcastMessage').value = '';
+            }
+        }
+
+        function sendDirectMessage() {
+            const userId = document.getElementById('targetUser').value;
+            const message = document.getElementById('directMessage').value.trim();
+            
+            if (userId && message && socket) {
+                socket.emit('admin_message_user', {
+                    userId: userId,
+                    message: message,
+                    messageType: 'text'
+                });
+                document.getElementById('directMessage').value = '';
+            }
+        }
+
+        function addMessage(message, type) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            
+            const timestamp = new Date(message.createdAt).toLocaleTimeString();
+            messageDiv.innerHTML = `
+                <div><strong>${message.sender.name}</strong></div>
+                <div>${message.message}</div>
+                <div style="font-size: 10px; opacity: 0.7;">${timestamp}</div>
+            `;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function showTypingIndicator(data) {
+            // Implementation for typing indicator
+            console.log(`${data.senderName} is ${data.isTyping ? 'typing' : 'not typing'}`);
+        }
+
+        function updateUserStatus(userId, isOnline) {
+            // Update user status in UI
+            console.log(`User ${userId} is now ${isOnline ? 'online' : 'offline'}`);
+        }
+
+        function updateConnectionStatus(connected) {
+            const statusDiv = document.getElementById('connectionStatus');
+            if (connected) {
+                statusDiv.className = 'status connected';
+                statusDiv.textContent = 'Connected';
+            } else {
+                statusDiv.className = 'status disconnected';
+                statusDiv.textContent = 'Disconnected';
+            }
+        }
+
+        // Handle Enter key in message input
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('messageInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

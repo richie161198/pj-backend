@@ -8,6 +8,18 @@ const ResetTokenSchema = new mongoose.Schema({
   expiresAt: { type: Date }
 }, { _id: false });
 
+const addressSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  phone: { type: String, required: true },
+  street: { type: String, required: true },
+  city: { type: String, required: true },
+  state: { type: String, required: true },
+  pincode: { type: String, required: true },
+  isDefault: { type: Boolean, default: false },
+  type: { type: String, default: "Home" },
+  landmark: { type: String },
+});
+
 const panSchema = new mongoose.Schema({
   pan: { type: String },
   type: { type: String },
@@ -84,9 +96,15 @@ const userSchema = mongoose.Schema(
       type: String,
       default: 0,
     },
+    address: [addressSchema],
     appId: {
       type: String,
-    },
+    }, wishlist: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product",
+      },
+    ],
     referralCode: {
       type: String,
     },
@@ -131,11 +149,11 @@ const userSchema = mongoose.Schema(
     }, panVerified: {
       type: Boolean,
       default: false,
-    },  mobileVerified: {
+    }, mobileVerified: {
       type: Boolean,
       default: false,
     },
-    
+
     panDetails: panSchema,
     bankDetails: [bankSchema],
     level: [

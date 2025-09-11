@@ -5,11 +5,14 @@ const xlsx = require("xlsx");
 
 const Cart = require("../models/cart_model");
 const Order = require("../models/orderModel");
+const Category = require("../models//category_model.js");
+
+const expressAsyncHandler = require("express-async-handler");
 
 /**
  * Add a single product
  */
-const addProduct = async (req, res) => {
+const addProduct = expressAsyncHandler(async (req, res) => {
   try {
     const product = new Product(req.body);
     await product.save();
@@ -22,12 +25,12 @@ const addProduct = async (req, res) => {
   } catch (error) {
     res.status(500).json({ status: false, message: error.message });
   }
-};
+});
 
 /**
  * Update product
  */
-const updateProduct = async (req, res) => {
+const updateProduct = expressAsyncHandler(async (req, res) => {
   try {
     const updatedProduct = await Product.findByIdAndUpdate(
       req.params.id,
@@ -50,12 +53,12 @@ const updateProduct = async (req, res) => {
   } catch (error) {
     res.status(500).json({ status: false, message: error.message });
   }
-};
+});
 
 /**
  * Delete product
  */
-const deleteProduct = async (req, res) => {
+const deleteProduct = expressAsyncHandler(async (req, res) => {
   try {
     const deleted = await Product.findByIdAndDelete(req.params.id);
 
@@ -73,24 +76,24 @@ const deleteProduct = async (req, res) => {
   } catch (error) {
     res.status(500).json({ status: false, message: error.message });
   }
-};
+});
 
 /**
  * Get all products
  */
-const getAllProducts = async (req, res) => {
+const getAllProducts = expressAsyncHandler(async (req, res) => {
   try {
     const products = await Product.find({});
     res.status(200).json({ status: true, count: products.length, products });
   } catch (error) {
     res.status(500).json({ status: false, message: error.message });
   }
-};
+});
 
 /**
  * Get product by ID
  */
-const getProductById = async (req, res) => {
+const getProductById = expressAsyncHandler(async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
 
@@ -105,12 +108,12 @@ const getProductById = async (req, res) => {
   } catch (error) {
     res.status(500).json({ status: false, message: error.message });
   }
-};
+});
 
 /**
  * Bulk upload products from Excel
  */
-const bulkUploadProducts = async (req, res) => {
+const bulkUploadProducts = expressAsyncHandler(async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ status: false, message: "No file uploaded" });
@@ -135,11 +138,13 @@ const bulkUploadProducts = async (req, res) => {
   } catch (error) {
     res.status(500).json({ status: false, message: error.message });
   }
-};
+});
 
-const addToCart = async (req, res) => {
+const addToCart = expressAsyncHandler(async (req, res) => {
   try {
-    const { userId, productId, qty = 1 } = req.body;
+    const { productId, qty = 1 } = req.body;
+    let userId = req.user.id;
+    console.log("user id $, ", req.user.id)
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ status: false, message: "❌ User not found" });
@@ -161,9 +166,10 @@ const addToCart = async (req, res) => {
       // create new cart
       cart = new Cart({
         userId,
-        items: [{ productId, qty: quantity, priceAtAdded: price }],
+        items: [{ productId, productDataid: productId, qty: quantity, priceAtAdded: price }],
         total: price * quantity,
       });
+      await cart.save();
     } else {
       // check if product already exists in cart
       const itemIndex = cart.items.findIndex(
@@ -175,7 +181,10 @@ const addToCart = async (req, res) => {
         cart.items[itemIndex].qty += quantity;
       } else {
         // add new item
-        cart.items.push({ productId, qty: quantity, priceAtAdded: price });
+        cart.items.push({ productId, productDataid: productId, qty: quantity, priceAtAdded: price });
+
+
+        await cart.save();
       }
 
       // recalc total safely
@@ -192,14 +201,14 @@ const addToCart = async (req, res) => {
   } catch (error) {
     res.status(500).json({ status: false, message: error.message });
   }
-};
+});
 
 
 
-const removeFromCart = async (req, res) => {
+const removeFromCart = expressAsyncHandler(async (req, res) => {
   try {
-    const { userId, productId } = req.body;
-
+    const { productId } = req.body;
+    const userId = req.user.id;
     let cart = await Cart.findOne({ userId });
     if (!cart) {
       return res.status(404).json({ status: false, message: "❌ Cart not found" });
@@ -228,14 +237,14 @@ const removeFromCart = async (req, res) => {
   } catch (error) {
     res.status(500).json({ status: false, message: error.message });
   }
-};
+});
 
 
 
-const getCart = async (req, res) => {
+const getCart = expressAsyncHandler(async (req, res) => {
   try {
-    const { userId } = req.params;
-
+    const userId = req.user.id;
+    console.log("userId", userId, req.user.id);
     const cart = await Cart.findOne({ userId }).populate("items.productId");
 
     if (!cart) {
@@ -246,9 +255,9 @@ const getCart = async (req, res) => {
   } catch (error) {
     res.status(500).json({ status: false, message: error.message });
   }
-};
+});
 
-const clearCart = async (req, res) => {
+const clearCart = expressAsyncHandler(async (req, res) => {
   try {
     const { userId } = req.body;
 
@@ -258,9 +267,9 @@ const clearCart = async (req, res) => {
   } catch (error) {
     res.status(500).json({ status: false, message: error.message });
   }
-};
+});
 
-const checkout = async (req, res) => {
+const checkout = expressAsyncHandler(async (req, res) => {
   try {
     const { userId, addressId, paymentMethod } = req.body;
 
@@ -312,12 +321,55 @@ const checkout = async (req, res) => {
   } catch (error) {
     res.status(500).json({ status: false, message: error.message });
   }
-};
+});
+
+
+
+// Create Category
+const createCategory = expressAsyncHandler(async (req, res) => {
+  try {
+    const { name, description, image, newTag} = req.body;
+
+    const category = new Category({ name, description, image, newTag });
+    await category.save();
+
+    res.status(201).json({ status: true, category });
+  } catch (error) {
+    res.status(500).json({ status: false, message: error.message });
+  }
+});
+
+// Get All Categories
+const getAllCategories = expressAsyncHandler(async (req, res) => {
+  try {
+    const categories = await Category.find({});
+    res.status(200).json({ status: true, count: categories.length, categories });
+  } catch (error) {
+    res.status(500).json({ status: false, message: error.message });
+  }
+});
+
+// Get Category by ID + Products
+const getCategoryWithProducts = expressAsyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const category = await Category.findById(id);
+    if (!category) {
+      return res.status(404).json({ status: false, message: "Category not found" });
+    }
+
+    const products = await Product.find({ categoryId: id });
+    res.status(200).json({ status: true, category, products });
+  } catch (error) {
+    res.status(500).json({ status: false, message: error.message });
+  }
+});
+
 
 
 
 module.exports = {
-  addProduct, addToCart, removeFromCart, getCart,clearCart,checkout,
+  addProduct, addToCart, removeFromCart, getCart, clearCart, checkout, createCategory, getAllCategories, getCategoryWithProducts,
   updateProduct,
   deleteProduct,
   getAllProducts,

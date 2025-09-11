@@ -1,5 +1,6 @@
 const axios = require("axios");
 const orderModel = require("../models/orderModel");
+const productOrder = require("../models/commerce_order_model");
 const transactionSchema = require("../models/transcationModel");
 const { Cashfree, CFEnvironment } = require("cashfree-pg");
 var cashfree = new Cashfree(
@@ -60,125 +61,6 @@ const depositINR = async (req, res) => {
 const withdrawINR = async (req, res) => {
   console.log(req.body);
 };
-// const buyOrSellGold = async (req, res) => {
-
-//     const userId = req.user.id;
-//   const {
-//     orderType, // "buy" or "sell"
-//     transactionType, // "gold"
-//     product, // e.g., "Gold 24K"
-//     goldQty, // optional for buy
-//     gstAmount,
-//     goldPrice,
-//     Payment_method,
-//     inrAmount, // INR total for buy/sell
-//   } = req.body;
-// console.log("req.body",req.body);
-//   try {
-//     const user = await userModel.findById(userId);
-//     console.log(user);
-
-//     if (!user)
-//       return res.status(404).json({ status: false, message: "User not found" });
-// const orderId = `PGORD-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-
-//     // const gstRate = 0.03;
-//     // // Get live gold price per gram in INR
-//     // const livePrice = await fetchLiveGoldPriceINR();
-//     // console.log("liver price:", livePrice);
-//     // const goldPrice = livePrice || 7200; // fallback price
-
-//     // // GST & net amount
-//     // const gstAmount = +(amount * gstRate).toFixed(2);
-//     // const netAmount = +(amount - gstAmount).toFixed(2);
-
-//     if (orderType === "buy") {
-//       // const goldQty = +(netAmount / goldPrice).toFixed(4);
-
-//       // if (user.balanceINR < amount) {
-//       //   return res
-//       //     .status(400)
-//       //     .json({ status: false, message: "Insufficient INR balance" });
-//       // }
-
-//       // const newGoldBalance = (+user.goldBalance + goldQty).toFixed(2);
-//       const newGoldBalance = Number(user.goldBalance) + goldQty;
-    
-
-//       await userModel.findByIdAndUpdate(userId, {
-//         goldBalance: newGoldBalance.toString(),
-//         // balanceINR: newINRBalance,
-//       });
-
-//       await transactionSchema.create({
-//         userId,
-//         orderId: orderId,
-//         orderType,
-//         transactionType,
-//         gst_value: gstAmount,
-//         // product,
-//         goldCurrentPrice: goldPrice,
-//         goldQtyInGm: goldQty,
-//         Payment_method,
-//         inramount: inrAmount,
-//         status: "created",
-//       });
-
-//       return res.status(201).json({
-//         status: true,
-//         message: `Bought ${goldQty}g gold for ₹${inrAmount} (₹${gstAmount} GST applied)`,
-//         goldBalance: newGoldBalance,
-//       });
-//     } else if (orderType === "sell") {
-//       // const goldQty = +(amount / goldPrice).toFixed(4);
-
-//       if (user.goldBalance < goldQty) {
-//         return res
-//           .status(400)
-//           .json({ status: false, message: "Insufficient gold balance" });
-//       }
-
-//       const receivedAmount = inrAmount;
-
-//       const newGoldBalance = (+user.goldBalance - goldQty).toFixed(4);
-//       const newINRBalance = Number(user.balanceINR) + Number(receivedAmount)
-
-//       await userModel.findByIdAndUpdate(userId, {
-//         goldBalance: newGoldBalance,
-//         balanceINR: newINRBalance,
-//       });
-
-//       await transactionSchema.create({
-//         userId,
-//         orderId: orderId,
-//         orderType,
-//         transactionType,
-//         gst_value: gstAmount,
-//         // product,
-//         goldCurrentPrice: goldPrice,
-//         goldQtyInGm: goldQty,
-//         Payment_method,
-//         inramount: receivedAmount,
-//         status: "created",
-//       });
-//       // user.goldBalance = (user.goldBalance || 0) - goldQty;
-//       // await user.save();
-//       return res.status(201).json({
-//         status: true,
-//         message: `Sold ${goldQty}g gold for ₹${receivedAmount} (₹${gstAmount} GST deducted)`,
-//         goldBalance: newGoldBalance,
-//         balanceINR: newINRBalance,
-//       });
-//     } else {
-//       return res
-//         .status(400)
-//         .json({ status: false, message: "Invalid order type" });
-//     }
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({ status: false, message: error.message });
-//   }
-// };
 
 const buyOrSellGold = async (req, res) => {
   const userId = req.user.id;
@@ -228,12 +110,12 @@ const buyOrSellGold = async (req, res) => {
         status: true,
         message: `Bought ${goldQty}g gold for ₹${inrAmount} (₹${gstAmount} GST applied)`,
         goldBalance: newGoldBalance,
-        createdAt:Date.now(),
-        orderId:orderId,
-        Payment_method:Payment_method
+        createdAt: Date.now(),
+        orderId: orderId,
+        Payment_method: Payment_method
       });
-    } 
-    
+    }
+
     else if (orderType === "sell") {
       if (currentGoldBalance < goldQty) {
         return res.status(400).json({ status: false, message: "Insufficient gold balance" });
@@ -266,13 +148,13 @@ const buyOrSellGold = async (req, res) => {
         message: `Sold ${goldQty}g gold for ₹${receivedAmount} (₹${gstAmount} GST deducted)`,
         goldBalance: newGoldBalance,
         balanceINR: newINRBalance,
-        createdAt:Date.now(),
-        orderId:orderId,
-        Payment_method:Payment_method
+        createdAt: Date.now(),
+        orderId: orderId,
+        Payment_method: Payment_method
 
       });
-    } 
-    
+    }
+
     else {
       return res.status(400).json({ status: false, message: "Invalid order type" });
     }
@@ -325,11 +207,11 @@ const getUserOrderHistory = async (req, res) => {
 // ==========================
 const getParticularOrderHistory = async (req, res) => {
   try {
-    
-    console.log("order",req.body)
+
+    console.log("order", req.body)
     const { orderId } = req.body;
 
-    console.log("order",orderId)
+    console.log("order", orderId)
     if (!orderId) {
       return res
         .status(400)
@@ -355,8 +237,8 @@ const getParticularOrderHistory = async (req, res) => {
 
 const createOrder = async (req, res) => {
   console.log("sddsds", req.body);
-    const { order_amount } = req.body;
-   const orderId = `ORD-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+  const { order_amount } = req.body;
+  const orderId = `ORD-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 
   try {
     var request = {
@@ -396,11 +278,84 @@ const createOrder = async (req, res) => {
 
 
 
+// Place Order
+const placeOrder = async (req, res) => {
+  try {
+    const { items, totalAmount ,deliveryAddress} = req.body;
+
+    console.log(req.body, req.user.id);
+    const orderId = `PGCOM-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+
+    const order = new productOrder({
+      user: req.user.id,
+      orderCode: orderId,
+      items,
+      totalAmount,
+      deliveryAddress
+    });
+
+    await order.save();
+    res.status(201).json({ success: true, message: "Order placed", order });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// Return Order
+const returnOrder = async (req, res) => {
+  try {
+    const { orderId, reason } = req.body;
+
+    const order = await productOrder.findById(orderId);
+    if (!order) return res.status(404).json({ success: false, error: "Order not found" });
+
+    order.status = "RETURNED";
+    order.returnReason = reason;
+    await order.save();
+
+    res.json({ success: true, message: "Order marked as returned", order });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// Refund Order
+const refundOrder = async (req, res) => {
+  try {
+    const { orderId, refundAmount } = req.body;
+
+    const order = await productOrder.findById(orderId);
+    if (!order) return res.status(404).json({ success: false, error: "Order not found" });
+
+    order.status = "REFUNDED";
+    order.refundAmount = refundAmount;
+    await order.save();
+
+    res.json({ success: true, message: "Refund processed", order });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// Get Order History
+const getOrderHistory = async (req, res) => {
+  try {
+    const orders = await productOrder.find({ user: req.user.id }).sort({ createdAt: -1 }).populate("items.productDataid");
+    res.json({ success: true, orders });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+
+
+
 module.exports = {
+  placeOrder, returnOrder, refundOrder, getOrderHistory,
   buyOrSellGold,
   getAllOrderHistory,
   getUserOrderHistory,
   getParticularOrderHistory,
   depositINR,
-  withdrawINR,createOrder
+  withdrawINR, createOrder
 };

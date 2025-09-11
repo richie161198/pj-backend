@@ -53,7 +53,7 @@ app.use(cors());
 
 app.get("/", (req, res) => {
   console.log("started");
-  res.status(200).json({ status: "true", message: "api is working properly" });
+  res.status(200).json({ status: "true", message: "api is working properly 11/09/2025" });
   console.log("api is working properly");
 });
 
@@ -341,8 +341,6 @@ app.use("/api/v0/commerce", require("./routers/productRouter"));
 // });
 
 // app.use(errorHandler);
-
-// current file //
 
 server.listen(process.env.PORT, () => {
   console.log(`Server on ${process.env.PORT} `);

@@ -9,9 +9,9 @@ const detailSchema = new mongoose.Schema({
 
 // Sub-schema for price details
 const priceDetailSchema = new mongoose.Schema({
-  name: { type: String, required: true },   // e.g. "Gold", "Stone", "Making Charges"
-  weight: { type: String },                 // e.g. "2.903g"
-  value: { type: Number, required: true }   // e.g. 22127.86
+  name: { type: String, required: true },   
+  weight: { type: String },                 
+  value: { type: Number, required: true }   
 }, { _id: false });
 
 const productSchema = new mongoose.Schema(
@@ -20,7 +20,8 @@ const productSchema = new mongoose.Schema(
     brand: { type: String, required: true },     
     description: { type: String },
     sellingprice: { type: Number, required: true },
-    categories: [String],
+    categories: {type:String,required:true},
+    categoryId: { type: mongoose.Schema.Types.ObjectId, ref: "Category", required: true },
 
     skuId: { type: String, unique: true },       
     active: { type: Boolean, default: true },

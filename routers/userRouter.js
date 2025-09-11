@@ -1,5 +1,5 @@
 const asyncHandler = require("express-async-handler");
-const { updateuserById, getuserById, getAllUser,getGoldprice, deleteuserById, setTransactionPin, verifyTransactionPin} = require("../controller/userContoller")
+const { updateTicketStatus, getTicketById, getMyTickets, createTicket, addToWishlist, removeFromWishlist, getWishlist, updateuserById, getuserById, getAllUser, addAddress, getAddresses, deleteAddress, deleteuserById, setTransactionPin, verifyTransactionPin, updateAddress } = require("../controller/userContoller")
 const express = require("express");
 const multer = require('multer');
 const { isAuth } = require("../middleware/tokenValidation");
@@ -9,7 +9,7 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage })
 
 router.route("/getAllUser").post(getAllUser);
-router.route("/getuserById").get(isAuth,getuserById);
+router.route("/getuserById").get(isAuth, getuserById);
 router.route("/updateuserById/:id").post(updateuserById);
 router.route("/deleteuserById/:id").post(deleteuserById);
 // router.route("/set-transaction-pin").post(isAuth, setTransactionPin);
@@ -17,5 +17,21 @@ router.route("/deleteuserById/:id").post(deleteuserById);
 
 router.post("/set-transaction-pin", isAuth, setTransactionPin);
 router.post("/verify-transaction-pin", isAuth, verifyTransactionPin);
+router.route("/addAddress").post(isAuth, addAddress);
+router.route("/updateAddress/:addressId").post(isAuth, updateAddress);
+router.route("/deleteAddress").delete(isAuth, deleteAddress);
+router.route("/getAddress").get(isAuth, getAddresses);
+
+
+// wishlist
+router.route("/addToWishlist").post(isAuth, addToWishlist);
+router.route("/removeFromWishlist").post(isAuth, removeFromWishlist);
+router.route("/getWishlist").get(isAuth, getWishlist);
+
+// tickets
+router.route("/getMyTickets").get(isAuth, getMyTickets);
+router.route("/createTicket").post(isAuth, createTicket);
+router.route("/getTicketById").get(isAuth, getTicketById);
+router.route("/updateTicketStatus").post(isAuth, updateTicketStatus);
 
 module.exports = router;
