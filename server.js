@@ -53,7 +53,7 @@ app.use(cors());
 
 app.get("/", (req, res) => {
   console.log("started");
-  res.status(200).json({ status: "true", message: "api is working properly 11/09/2025" });
+  res.status(200).json({ status: "true", message: "api is working properly" });
   console.log("api is working properly");
 });
 
