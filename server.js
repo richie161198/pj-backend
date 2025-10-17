@@ -18,6 +18,11 @@ const SibApiV3Sdk = require("sib-api-v3-sdk");
 const { sendEmail } = require("./helpers/mailer");
 const { generateOTP } = require("./helpers/helpers");
 const { v4: uuidv4 } = require("uuid");
+const puppeteer = require("puppeteer");
+const fs = require("fs");
+
+const logoBase64 = fs.readFileSync("public/logo/23.png").toString("base64");
+
 
 // import { v4 as  } =require("uuid");
 // const encrypt = require("./helpers/crypto")
@@ -329,10 +334,16 @@ app.post("/upload", upload.single("image"), (req, res) => {
 });
 
 app.use("/api/v0/auth", require("./routers/authRouter"));
+app.use("/api/v0/admin", require("./routers/adminRouter"));
 app.use("/api/v0/users", require("./routers/userRouter"));
 app.use("/api/v0/utils", require("./routers/utilsRouter"));
 app.use("/api/v0/order", require("./routers/orderRouter"));
 app.use("/api/v0/commerce", require("./routers/productRouter"));
+app.use("/api/v0/images", require("./routers/imageRouter"));
+app.use("/api/v0/chat", require("./routers/chatRouter"));
+app.use("/api/v0/notifications", require("./routers/notificationRouter"));
+app.use("/api/v0/maintenance", require("./routers/maintenanceRouter"));
+app.use("/api/v0/invoices", require("./routers/invoiceRouter"));
 
 
 // Start server
@@ -341,6 +352,518 @@ app.use("/api/v0/commerce", require("./routers/productRouter"));
 // });
 
 // app.use(errorHandler);
+
+
+
+
+
+
+// Utility: Convert number to words (simple Indian currency words)
+// function numberToWords(num) {
+//   const inWords = require("number-to-words").toWords;
+//   return inWords(num).replace(/\b\w/g, l => l.toUpperCase());
+// }
+
+app.post("/api/v0/generate-invoice", async (req, res) => {
+  try {
+    const invoice = req.body; // Your order JSON
+
+    console.log(invoice);
+
+    // // Prepare items rows
+    // const itemsHtml = invoice.items
+    //   .map(
+    //     (item, idx) => `
+    //   <tr>
+    //     <td>${idx + 1}</td>
+    //     <td>${item.productDataid.name}</td>
+    //     <td>${item.productDataid.selectedCaret}</td>
+    //     <td>${item.quantity}</td>
+    //     <td>${item.productDataid.productDetails[0].attributes.grossWeight} g</td>
+    //     <td>${
+    //       item.productDataid.productDetails.find(p => p.type === "Stone")
+    //         ?.attributes?.carat || "-"
+    //     }</td>
+    //     <td>${item.price.toFixed(2)}</td>
+    //     <td>${item.productDataid.total.toLocaleString()}</td>
+    //   </tr>`
+    //   )
+    //   .join("");
+
+    // // Build invoice HTML
+    // const html = `
+    //   <html>
+    //     <head>
+    //       <style>
+    //         body { font-family: Arial, sans-serif; font-size: 12px; margin: 20px; }
+    //         .header { text-align: center; }
+    //         .logo { width: 100px; margin-bottom: 10px; }
+    //         .title { font-size: 18px; font-weight: bold; margin: 5px 0; }
+    //         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    //         th, td { border: 1px solid #000; padding: 6px; text-align: center; font-size: 12px; }
+    //         th { background: #f2f2f2; }
+    //         .footer { margin-top: 30px; font-size: 11px; }
+    //         .right { text-align: right; }
+    //       </style>
+    //     </head>
+    //     <body>
+    //       <div class="header">
+    //         <img src="https://i.ibb.co/7nk3Qv7/logo.png" class="logo" />
+    //         <div class="title">PRECIOUS GOLDSMITH</div>
+    //         <div>KSAN INDUSTRIES LLP | GSTIN NO: 33BAFK98176AIZK</div>
+    //         <div>New No:46, Old No:70/1, Bazullah Road, T Nagar, Chennai</div>
+    //       </div>
+          
+    //       <h3 style="text-align:center;margin-top:20px;">TAX INVOICE</h3>
+
+    //       <div>
+    //         <strong>Invoice No:</strong> ${invoice.orderCode}<br/>
+    //         <strong>Invoice Date:</strong> ${new Date(
+    //           invoice.createdAt
+    //         ).toLocaleDateString()}
+    //       </div>
+
+    //       <div style="margin-top:10px;">
+    //         <strong>Billing Address:</strong><br/>
+    //         ${invoice.deliveryAddress}
+    //       </div>
+
+    //       <table>
+    //         <thead>
+    //           <tr>
+    //             <th>Sl No</th>
+    //             <th>Product Description</th>
+    //             <th>Purity</th>
+    //             <th>Qty</th>
+    //             <th>Gross Wt</th>
+    //             <th>Stone Carat</th>
+    //             <th>Unit Price</th>
+    //             <th>Total</th>
+    //           </tr>
+    //         </thead>
+    //         <tbody>
+    //           ${itemsHtml}
+    //         </tbody>
+    //       </table>
+
+    //       <div class="right" style="margin-top:10px;">
+    //         <strong>Total Amount:</strong> ₹${invoice.totalAmount.toLocaleString()}<br/>
+    //         <strong>Amount in Words:</strong>
+    //         ${Math.round(invoice.totalAmount)} 
+    //          Rupees Only
+    //       </div>
+
+    //       <div class="footer">
+    //         <p><strong>Payment Mode:</strong> Non-COD</p>
+    //         <p><strong>Terms:</strong> Subject to Chennai Jurisdiction</p>
+    //       </div>
+    //     </body>
+    //   </html>
+    // `;
+
+
+    // Prepare items rows
+const itemsHtml = invoice.items
+  .map(
+    (item, idx) => `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${item.productDataid.name}</td>
+        <td>${item.productDataid.selectedCaret || "-"}</td>
+        <td>${item.quantity}</td>
+        <td>${item.productDataid.productDetails[0].attributes.grossWeight || "-"}</td>
+        <td>${
+          item.productDataid.productDetails.find(p => p.type === "Stone")?.attributes?.carat || "-"
+        }</td>
+        <td>${item.productDataid.productDetails[0].attributes.netWeight || "-"}</td>
+        <td>${item.makingCharges?.toLocaleString() || "-"}</td>
+        <td>${item.productValue?.toLocaleString() || "-"}</td>
+        <td>${item.discount || "-"}</td>
+        <td>${item.taxableValue?.toLocaleString() || "-"}</td>
+      </tr>`
+  )
+  .join("");
+
+// Build invoice HTML
+const html = `
+<html>
+  <head>
+    <style>
+      body { font-family: Arial, sans-serif; font-size: 12px; margin: 20px; }
+      .header { text-align: center; }
+      .logo { width: 80px; margin-bottom: 8px; }
+      .company { font-size: 16px; font-weight: bold; }
+      .subhead { font-size: 12px; margin: 2px 0; }
+      h3 { text-align: center; margin: 15px 0; text-transform: uppercase; }
+      table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+      th, td { border: 1px solid #000; padding: 5px; text-align: center; font-size: 11px; }
+      th { background: #f2f2f2; }
+      .two-col { display: flex; justify-content: space-between; margin-top: 10px; }
+      .address { width: 48%; font-size: 11px; }
+      .right { text-align: right; }
+      .footer { margin-top: 15px; font-size: 11px; }
+      .totals td { font-weight: bold; }
+    </style>
+  </head>
+  <body>
+    <!-- HEADER -->
+    <div class="header">
+ <img src="data:image/png;base64,${logoBase64}" class="logo"/>
+      <div class="company">PRECIOUS GOLDSMITH</div>
+      <div class="subhead">KSAN INDUSTRIES LLP &nbsp; | &nbsp; GSTIN NO: 33BAFK98176AIZK</div>
+      <div class="subhead">New No:46, Old No:70/1, Bazullah Road, T Nagar, Chennai - 600017</div>
+      <div class="subhead">contact@preciousgoldsmith.com | website: preciousgoldsmith.com</div>
+    </div>
+
+    <h3>Tax Invoice</h3>
+
+    <!-- INVOICE DETAILS -->
+    <table>
+      <tr>
+        <td><b>Invoice No:</b> ${invoice.orderCode}</td>
+        <td><b>Order No:</b> ${invoice.orderNumber || "xxxxxxxxxxxx"}</td>
+      </tr>
+      <tr>
+        <td><b>Invoice Date:</b> ${new Date(invoice.createdAt).toLocaleDateString()}</td>
+        <td><b>Order Date & Time:</b> ${invoice.orderDateTime || "xxxxxxxxxxxx"}</td>
+      </tr>
+    </table>
+
+    <!-- ADDRESSES -->
+    <div class="two-col">
+      <div class="address">
+        <b>Customer Billing Address:</b><br/>
+        ${invoice.billingAddress}
+      </div>
+      <div class="address">
+        <b>Customer Shipping Address:</b><br/>
+        ${invoice.shippingAddress}
+      </div>
+    </div>
+
+    <!-- ITEMS TABLE -->
+    <table>
+      <thead>
+        <tr>
+          <th>Sl No</th>
+          <th>Product Description</th>
+          <th>Purity HSN</th>
+          <th>Qty</th>
+          <th>Gross Wt (g)</th>
+          <th>Net Stone Wt (ct)</th>
+          <th>Net Wt (g)</th>
+          <th>Making Charges</th>
+          <th>Product Value</th>
+          <th>Discount</th>
+          <th>Taxable Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemsHtml}
+      </tbody>
+      <tfoot>
+        <tr class="totals">
+          <td colspan="3">Total</td>
+          <td>${invoice.totalQty}</td>
+          <td>${invoice.totalGrossWt}</td>
+          <td>${invoice.totalStoneCt || "-"}</td>
+          <td>${invoice.totalNetWt}</td>
+          <td>${invoice.totalMakingCharges}</td>
+          <td>${invoice.totalProductValue}</td>
+          <td>${invoice.totalDiscount}</td>
+          <td>${invoice.totalTaxableValue}</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <!-- SUMMARY -->
+    <table style="margin-top:10px;">
+      <tr>
+        <td><b>Invoice Amount (In Words):</b> ${invoice.amountInWords}</td>
+      </tr>
+      <tr>
+        <td><b>Payment Mode:</b> ${invoice.paymentMode || "Non COD"}</td>
+      </tr>
+      <tr>
+        <td><b>Balance Payable:</b> ${invoice.balance || "Nil"}</td>
+      </tr>
+    </table>
+
+    <!-- TAX -->
+    <table style="margin-top:10px;">
+      <tr>
+        <td>CGST @ 1.5%</td>
+        <td class="right">${invoice.cgst}</td>
+      </tr>
+      <tr>
+        <td>SGST @ 1.5%</td>
+        <td class="right">${invoice.sgst}</td>
+      </tr>
+      <tr>
+        <td><b>Total Amount</b></td>
+        <td class="right"><b>${invoice.totalAmount.toLocaleString()}</b></td>
+      </tr>
+    </table>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <p><b>Standard Rate of Gold:</b> 24kt/22kt/18kt etc …</p>
+      <p><b>Terms and Conditions:</b></p>
+      <ol>
+        <li>Refer our app/website for detailed terms and policies.</li>
+        <li>Subject to Chennai Jurisdiction.</li>
+        <li>Weight tolerance of ±0.020 g per product is considered normal.</li>
+        <li>Products can be verified at BIS recognised Assaying & Hallmarking Centres.</li>
+      </ol>
+    </div>
+  </body>
+</html>
+`;
+
+    // Launch Puppeteer & generate PDF
+    const browser = await puppeteer.launch({ headless: "new" });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
+
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      margin: { top: "20px", bottom: "20px" }
+    });
+
+    await browser.close();
+
+    // Send PDF response
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": "attachment; filename=invoice.pdf",
+    });
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error generating invoice");
+  }
+});
+
+
+
+
+
+// Socket.IO setup
+const jwt = require('jsonwebtoken');
+const User = require('./models/userModel');
+const Chat = require('./models/chatModel');
+
+// Store online users
+const onlineUsers = new Map();
+
+// Socket.IO authentication middleware
+io.use(async (socket, next) => {
+  try {
+    const token = socket.handshake.auth.token;
+    if (!token) {
+      return next(new Error('Authentication error'));
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).select('-password');
+    
+    if (!user) {
+      return next(new Error('User not found'));
+    }
+
+    socket.userId = user._id.toString();
+    socket.userRole = user.role;
+    socket.userName = user.name;
+    next();
+  } catch (error) {
+    next(new Error('Authentication error'));
+  }
+});
+
+io.on('connection', (socket) => {
+  console.log(`User connected: ${socket.userId} (${socket.userRole})`);
+  
+  // Add user to online users
+  onlineUsers.set(socket.userId, {
+    socketId: socket.id,
+    userId: socket.userId,
+    userRole: socket.userRole,
+    userName: socket.userName,
+    isOnline: true,
+    lastSeen: new Date()
+  });
+
+  // Join user to their personal room
+  socket.join(`user_${socket.userId}`);
+
+  // If admin, join admin room
+  if (socket.userRole === 'admin') {
+    socket.join('admin_room');
+  }
+
+  // Handle joining chat room
+  socket.on('join_chat', async (chatId) => {
+    try {
+      const chat = await Chat.findById(chatId);
+      if (!chat) {
+        socket.emit('error', { message: 'Chat not found' });
+        return;
+      }
+
+      // Check if user is participant
+      const isParticipant = chat.participants.some(
+        p => p.userId.toString() === socket.userId
+      );
+
+      if (!isParticipant) {
+        socket.emit('error', { message: 'Access denied' });
+        return;
+      }
+
+      socket.join(`chat_${chatId}`);
+      socket.emit('joined_chat', { chatId });
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to join chat' });
+    }
+  });
+
+  // Handle sending message
+  socket.on('send_message', async (data) => {
+    try {
+      const { chatId, message, messageType = 'text', attachments = [] } = data;
+      
+      const chat = await Chat.findById(chatId);
+      if (!chat) {
+        socket.emit('error', { message: 'Chat not found' });
+        return;
+      }
+
+      // Check if user is participant
+      const participant = chat.participants.find(
+        p => p.userId.toString() === socket.userId
+      );
+
+      if (!participant) {
+        socket.emit('error', { message: 'Access denied' });
+        return;
+      }
+
+      // Add message to chat
+      const newMessage = {
+        senderId: socket.userId,
+        senderRole: participant.role,
+        message,
+        messageType,
+        attachments,
+        timestamp: new Date()
+      };
+
+      chat.messages.push(newMessage);
+      await chat.save();
+
+      // Populate sender info
+      await chat.populate('messages.senderId', 'name email profilePhoto');
+
+      const messageWithSender = chat.messages[chat.messages.length - 1];
+
+      // Emit to all participants in the chat
+      io.to(`chat_${chatId}`).emit('new_message', {
+        chatId,
+        message: messageWithSender,
+        sender: {
+          id: socket.userId,
+          name: socket.userName,
+          role: participant.role
+        }
+      });
+
+      // Notify other participants if they're not in the chat room
+      chat.participants.forEach(participant => {
+        if (participant.userId.toString() !== socket.userId) {
+          const userSocket = Array.from(onlineUsers.values()).find(
+            user => user.userId === participant.userId.toString()
+          );
+          
+          if (userSocket) {
+            io.to(userSocket.socketId).emit('chat_notification', {
+              chatId,
+              message: message,
+              sender: socket.userName,
+              unreadCount: chat.messages.filter(msg => !msg.isRead).length
+            });
+          }
+        }
+      });
+
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to send message' });
+    }
+  });
+
+  // Handle typing indicator
+  socket.on('typing', (data) => {
+    const { chatId, isTyping } = data;
+    socket.to(`chat_${chatId}`).emit('user_typing', {
+      userId: socket.userId,
+      userName: socket.userName,
+      isTyping
+    });
+  });
+
+  // Handle marking messages as read
+  socket.on('mark_read', async (data) => {
+    try {
+      const { chatId } = data;
+      
+      const chat = await Chat.findById(chatId);
+      if (!chat) return;
+
+      // Mark messages as read
+      chat.messages.forEach(msg => {
+        if (!msg.readBy.some(read => read.userId.toString() === socket.userId)) {
+          msg.readBy.push({
+            userId: socket.userId,
+            readAt: new Date()
+          });
+        }
+      });
+
+      await chat.save();
+
+      // Notify other participants
+      socket.to(`chat_${chatId}`).emit('messages_read', {
+        chatId,
+        userId: socket.userId,
+        userName: socket.userName
+      });
+
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to mark messages as read' });
+    }
+  });
+
+  // Handle disconnect
+  socket.on('disconnect', () => {
+    console.log(`User disconnected: ${socket.userId}`);
+    onlineUsers.delete(socket.userId);
+    
+    // Notify admin room about user going offline
+    socket.to('admin_room').emit('user_offline', {
+      userId: socket.userId,
+      userName: socket.userName
+    });
+  });
+
+  // Handle user going online/offline
+  socket.on('user_status', (data) => {
+    const { isOnline } = data;
+    const user = onlineUsers.get(socket.userId);
+    if (user) {
+      user.isOnline = isOnline;
+      user.lastSeen = new Date();
+    }
+  });
+});
 
 server.listen(process.env.PORT, () => {
   console.log(`Server on ${process.env.PORT} `);

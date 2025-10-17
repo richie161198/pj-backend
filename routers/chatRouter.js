@@ -1,42 +1,43 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
 const {
-  getOrCreateConversation,
+  getAllChats,
+  getChatById,
+  createChat,
   sendMessage,
-  getConversationMessages,
-  getUserConversations,
-  markMessageAsRead,
-  markConversationAsRead,
-  deleteMessage,
-  getUnreadCount,
-  sendBroadcastMessage,
-  sendMessageToUser,
-  getOnlineUsers,
-  getUserStatus
-} = require("../controller/chatController");
-const { protect } = require("../middleware/tokenValidation");
+  markAsRead,
+  assignChat,
+  updateChatStatus,
+  getChatStats,
+  closeChat
+} = require('../controller/chatController');
+const { isAuth } = require('../middleware/tokenValidation');
 
-// Apply authentication middleware to all routes
-router.use(protect);
+// Get all chats (admin only)
+router.get('/chats', isAuth, getAllChats);
 
-// User routes
-router.get("/conversations", getUserConversations);
-router.get("/unread-count", getUnreadCount);
-router.get("/online-users", getOnlineUsers);
-router.get("/user-status/:userId", getUserStatus);
+// Get chat statistics (admin only)
+router.get('/chats/stats', isAuth, getChatStats);
 
-// Conversation routes
-router.get("/conversation/:receiverId", getOrCreateConversation);
-router.get("/conversation/:conversationId/messages", getConversationMessages);
+// Get specific chat
+router.get('/chats/:chatId', isAuth, getChatById);
 
-// Message routes
-router.post("/send", sendMessage);
-router.put("/message/:messageId/read", markMessageAsRead);
-router.put("/conversation/:conversationId/read", markConversationAsRead);
-router.delete("/message/:messageId", deleteMessage);
+// Create new chat
+router.post('/chats', isAuth, createChat);
 
-// Admin routes
-router.post("/admin/broadcast", sendBroadcastMessage);
-router.post("/admin/send-to-user", sendMessageToUser);
+// Send message
+router.post('/chats/:chatId/messages', isAuth, sendMessage);
+
+// Mark messages as read
+router.put('/chats/:chatId/read', isAuth, markAsRead);
+
+// Assign chat to admin
+router.put('/chats/:chatId/assign', isAuth, assignChat);
+
+// Update chat status
+router.put('/chats/:chatId/status', isAuth, updateChatStatus);
+
+// Close chat
+router.put('/chats/:chatId/close', isAuth, closeChat);
 
 module.exports = router;

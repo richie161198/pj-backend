@@ -1,211 +1,174 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
-// Message Schema
-const messageSchema = new mongoose.Schema({
-  sender: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Users",
-    required: true
-  },
-  receiver: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Users",
-    required: true
-  },
-  message: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  messageType: {
-    type: String,
-    enum: ["text", "image", "file", "system"],
-    default: "text"
-  },
-  isRead: {
-    type: Boolean,
-    default: false
-  },
-  readAt: {
-    type: Date
-  },
-  isDeleted: {
-    type: Boolean,
-    default: false
-  },
-  deletedAt: {
-    type: Date
-  },
-  replyTo: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Message"
-  },
-  metadata: {
-    type: mongoose.Schema.Types.Mixed,
-    default: {}
-  }
-}, {
-  timestamps: true
-});
-
-// Conversation Schema
-const conversationSchema = new mongoose.Schema({
+const chatSchema = new mongoose.Schema({
   participants: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Users",
-    required: true
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    role: {
+      type: String,
+      enum: ['user', 'admin'],
+      required: true
+    },
+    isOnline: {
+      type: Boolean,
+      default: false
+    },
+    lastSeen: {
+      type: Date,
+      default: Date.now
+    }
   }],
-  conversationType: {
-    type: String,
-    enum: ["private", "group", "admin_broadcast"],
-    default: "private"
-  },
-  lastMessage: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Message"
-  },
-  lastMessageAt: {
-    type: Date,
-    default: Date.now
-  },
+  messages: [{
+    senderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    senderRole: {
+      type: String,
+      enum: ['user', 'admin'],
+      required: true
+    },
+    message: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    messageType: {
+      type: String,
+      enum: ['text', 'image', 'file', 'system'],
+      default: 'text'
+    },
+    attachments: [{
+      filename: String,
+      originalName: String,
+      mimeType: String,
+      size: Number,
+      url: String
+    }],
+    isRead: {
+      type: Boolean,
+      default: false
+    },
+    readBy: [{
+      userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      },
+      readAt: {
+        type: Date,
+        default: Date.now
+      }
+    }],
+    timestamp: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   isActive: {
     type: Boolean,
     default: true
   },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Users"
-  },
-  title: {
+  priority: {
     type: String,
-    trim: true
+    enum: ['low', 'medium', 'high', 'urgent'],
+    default: 'medium'
   },
-  description: {
+  category: {
     type: String,
-    trim: true
+    enum: ['general', 'support', 'technical', 'billing', 'complaint'],
+    default: 'general'
   },
-  settings: {
-    allowNewMembers: {
-      type: Boolean,
-      default: true
-    },
-    muteNotifications: {
-      type: Boolean,
-      default: false
-    }
-  }
-}, {
-  timestamps: true
-});
-
-// Chat Room Schema for admin broadcasts
-const chatRoomSchema = new mongoose.Schema({
-  name: {
+  status: {
     type: String,
-    required: true,
-    trim: true
+    enum: ['open', 'closed', 'pending', 'resolved'],
+    default: 'open'
   },
-  description: {
-    type: String,
-    trim: true
-  },
-  createdBy: {
+  assignedTo: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Users",
-    required: true
+    ref: 'User'
   },
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  roomType: {
-    type: String,
-    enum: ["admin_broadcast", "support", "announcement"],
-    default: "admin_broadcast"
-  },
-  allowedUsers: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Users"
-  }],
-  settings: {
-    allowUserMessages: {
-      type: Boolean,
-      default: false
-    },
-    autoJoin: {
-      type: Boolean,
-      default: true
-    }
-  }
-}, {
-  timestamps: true
-});
-
-// User Online Status Schema
-const userStatusSchema = new mongoose.Schema({
-  user: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Users",
-    required: true,
-    unique: true
-  },
-  isOnline: {
-    type: Boolean,
-    default: false
-  },
-  lastSeen: {
-    type: Date,
-    default: Date.now
-  },
-  socketId: {
-    type: String
-  },
-  deviceInfo: {
-    type: mongoose.Schema.Types.Mixed,
-    default: {}
-  }
-}, {
-  timestamps: true
-});
-
-// Message Reactions Schema
-const messageReactionSchema = new mongoose.Schema({
-  message: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Message",
-    required: true
-  },
-  user: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Users",
-    required: true
-  },
-  reaction: {
-    type: String,
-    required: true
+  tags: [String],
+  metadata: {
+    userAgent: String,
+    ipAddress: String,
+    deviceType: String,
+    browser: String
   }
 }, {
   timestamps: true
 });
 
 // Indexes for better performance
-messageSchema.index({ sender: 1, receiver: 1, createdAt: -1 });
-messageSchema.index({ conversation: 1, createdAt: -1 });
-conversationSchema.index({ participants: 1 });
-conversationSchema.index({ lastMessageAt: -1 });
-userStatusSchema.index({ isOnline: 1 });
-userStatusSchema.index({ lastSeen: -1 });
+chatSchema.index({ 'participants.userId': 1 });
+chatSchema.index({ 'messages.timestamp': -1 });
+chatSchema.index({ status: 1, priority: 1 });
+chatSchema.index({ createdAt: -1 });
 
-const Message = mongoose.model("Message", messageSchema);
-const Conversation = mongoose.model("Conversation", conversationSchema);
-const ChatRoom = mongoose.model("ChatRoom", chatRoomSchema);
-const UserStatus = mongoose.model("UserStatus", userStatusSchema);
-const MessageReaction = mongoose.model("MessageReaction", messageReactionSchema);
+// Virtual for unread message count
+chatSchema.virtual('unreadCount').get(function() {
+  return this.messages.filter(msg => !msg.isRead).length;
+});
 
-module.exports = {
-  Message,
-  Conversation,
-  ChatRoom,
-  UserStatus,
-  MessageReaction
+// Method to add a new message
+chatSchema.methods.addMessage = function(senderId, senderRole, message, messageType = 'text', attachments = []) {
+  const newMessage = {
+    senderId,
+    senderRole,
+    message,
+    messageType,
+    attachments,
+    timestamp: new Date()
+  };
+  
+  this.messages.push(newMessage);
+  return this.save();
 };
+
+// Method to mark messages as read
+chatSchema.methods.markAsRead = function(userId) {
+  this.messages.forEach(msg => {
+    if (!msg.readBy.some(read => read.userId.toString() === userId.toString())) {
+      msg.readBy.push({
+        userId,
+        readAt: new Date()
+      });
+    }
+  });
+  return this.save();
+};
+
+// Static method to find or create chat
+chatSchema.statics.findOrCreateChat = async function(userId, adminId = null) {
+  let chat = await this.findOne({
+    'participants.userId': userId,
+    isActive: true
+  }).populate('participants.userId', 'name email profilePhoto');
+
+  if (!chat) {
+    const participants = [{
+      userId,
+      role: 'user'
+    }];
+
+    if (adminId) {
+      participants.push({
+        userId: adminId,
+        role: 'admin'
+      });
+    }
+
+    chat = new this({
+      participants,
+      messages: []
+    });
+    await chat.save();
+  }
+
+  return chat;
+};
+
+module.exports = mongoose.model('Chat', chatSchema);

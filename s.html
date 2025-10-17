@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 12px; }
+    .header { display: flex; justify-content: space-between; align-items: center; }
+    .header .company { text-align: right; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #000; padding: 5px; text-align: center; font-size: 12px; }
+    .totals { text-align: right; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <!-- HEADER with LOGO -->
+  <div class="header">
+    <div class="logo">
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABwAAAAcCAMAAABF0y+mAAAAWlBMVEVHcEz////////////////1683j07bk28j7+/j39vHu6+PaunH3x1T8z13jwnrazK3PkyvirGLkyH7bigrbwpPpmCHx2pvyvEfZnj/sqSvRqGr99+XokwbPsIZuMZziAAAABHRSTlMAkfT4jPTqygAAARtJREFUeAGV0wVihTAQRVHkTWSQQIMF2f82Oz80qdv9ghxciqKs6uqL6qoUQ4yUJklLZHBXFhVixnLTdr2xlt0wEh5VCSVuu6d7ZPATpPoNWkGykNzs3Ts0Cwuya4jY+NmbN0jrZgUB2wTGNnv9ihQCR5R2xjh7l/EIYUJCjqgyrmG2GSXZLCekMzSAXRNSmHckHOdZPbB9wT4MJqE555Nf0SzzZZCQztmbiI2TJidLZlSCiNgj9W80xx1xQp332Vut2nYNTuuExr8c7doDUF07IZbO81QZqWvVW5SdjoLhS8Q2nxbQ4Utkf04Q3W907xDKn/xYKGKD9wjt5wOxZTIfEfYalsMcNGmkqqJETjunGK+V8XW4S8M0WRbP0+IY9dDtugkAAAAASUVORK5CYII=" alt="Company Logo" style="height:60px;">
+    </div>
+    <div class="company">
+      <h2>Precious Goldsmith</h2>
+      <p>New No:46, Old No:70/1, Bazullah Road,<br/>
+      T Nagar, Chennai - 600017<br/>
+      Tamil Nadu, India<br/>
+      GSTIN: 33ABAFK98176AIZK<br/>
+      contact@preciousgoldsmith.com | preciousgoldsmith.com</p>
+    </div>
+  </div>
+
+  <hr/>
+
+  <!-- INVOICE INFO -->
+  <div>
+    <p><strong>TAX INVOICE</strong></p>
+    <p>Invoice No: <%= invoice.invoiceNumber %></p>
+    <p>Date: <%= invoice.date %></p>
+    <p>Order No: <%= invoice.orderNo %></p>
+    <p>Order Date: <%= invoice.orderDate %></p>
+  </div>
+
+  <!-- BILLING & SHIPPING -->
+  <div style="display:flex; justify-content: space-between; margin-top:20px;">
+    <div>
+      <strong>Billing Address</strong><br/>
+      <%= invoice.billing.name %><br/>
+      <%= invoice.billing.address %>
+    </div>
+    <div>
+      <strong>Shipping Address</strong><br/>
+      <%= invoice.shipping.name %><br/>
+      <%= invoice.shipping.address %>
+    </div>
+  </div>
+
+  <!-- ITEMS TABLE -->
+  <table>
+    <thead>
+      <tr>
+        <th>Sl No</th>
+        <th>Product</th>
+        <th>Purity</th>
+        <th>HSN</th>
+        <th>Qty</th>
+        <th>Gross Wt</th>
+        <th>Net Wt</th>
+        <th>Making Charges</th>
+        <th>Product Value</th>
+        <th>Discount</th>
+        <th>Taxable Value</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% invoice.items.forEach((item, index) => { %>
+        <tr>
+          <td><%= index+1 %></td>
+          <td><%= item.description %></td>
+          <td><%= item.purity %></td>
+          <td><%= item.hsn %></td>
+          <td><%= item.qty %></td>
+          <td><%= item.grossWt %></td>
+          <td><%= item.netWt %></td>
+          <td><%= item.makingCharges %></td>
+          <td><%= item.productValue %></td>
+          <td><%= item.discount %></td>
+          <td><%= item.taxableValue %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+
+  <!-- TOTALS -->
+  <div class="totals">
+    <p>CGST: <%= invoice.cgst %></p>
+    <p>SGST: <%= invoice.sgst %></p>
+    <p><strong>Total: <%= invoice.total %></strong></p>
+    <p><em>In Words: <%= invoice.amountInWords %></em></p>
+  </div>
+
+  <hr/>
+
+  <!-- TERMS -->
+  <p><strong>Terms & Conditions:</strong></p>
+  <ol>
+    <li>Refer our app/website for our detailed terms and policies.</li>
+    <li>Subject to Chennai Jurisdiction.</li>
+    <li>Weight tolerance ±0.020g is considered normal.</li>
+    <li>Verification at BIS-recognised centres is possible (charges apply).</li>
+  </ol>
+</body>
+</html>

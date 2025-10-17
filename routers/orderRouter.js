@@ -4,7 +4,7 @@ const {
   getAllOrderHistory,
   getUserOrderHistory,
   getParticularOrderHistory, depositINR, withdrawINR, buyOrSellGold, placeOrder, returnOrder, refundOrder, getOrderHistory,
-  createOrder} = require("../controller/orderController")
+  createOrder, getAllOrdersAdmin, getAllProductOrdersAdmin} = require("../controller/orderController")
 // const { validateToken } = require("../middleware/tokenValidation");
 const { isAuth } = require("../middleware/tokenValidation");
 
@@ -17,6 +17,8 @@ router.route("/withdrawInr").post(withdrawINR);
 // router.route("/getBalance").post(getBalance);
 router.route("/orderGold").post(isAuth,buyOrSellGold);
 router.route("/allorder").get(getAllOrderHistory);
+router.route("/admin/allorders").get(isAuth, getAllOrdersAdmin);
+router.route("/admin/allproductorders").get(isAuth, getAllProductOrdersAdmin);
 router.route("/userOrderHistory").get(isAuth,getUserOrderHistory);
 router.route("/orderTransaction").get(isAuth,getParticularOrderHistory);
 router.route("/create-order").post(isAuth,createOrder);

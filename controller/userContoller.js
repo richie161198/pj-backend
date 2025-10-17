@@ -32,6 +32,24 @@ const getuserById = asyncHandler(async (req, res) => {
     res.status(500).json(error);
   }
 });
+const getuserByIds = asyncHandler(async (req, res) => {
+  console.log(req.params.id);
+  console.log(req.body);
+  try {
+    const user = await User.findById(req.params.id);
+    console.log(user);
+    if (!user || user === null || user === undefined) {
+      // res.status(404).json({ message: "Not found", details: user });
+      res.status(404);
+      throw new Error("Not found ");
+    }
+
+    res.status(200).json({ message: "success", details: user });
+  } catch (error) {
+
+    res.status(500).json(error);
+  }
+}); ``
 // Set Transaction PIN
 const setTransactionPin = asyncHandler(async (req, res) => {
   const { pin } = req.body;
@@ -133,7 +151,7 @@ const deleteuserById = asyncHandler(async (req, res) => {
 
 const addAddress = asyncHandler(async (req, res) => {
   try {
-    const userId = req.user.id; 
+    const userId = req.user.id;
     const newAddress = req.body;
 
     const user = await User.findById(userId);
@@ -240,69 +258,69 @@ const updateAddress = asyncHandler(async (req, res) => {
 
 const addToWishlist = asyncHandler(async (req, res) => {
   const { productId } = req.body;
-try {
-  
-  const user = await User.findById(req.user.id);
-  if (!user) return res.status(404).json({ message: "User not found" });
+  try {
 
-  const product = await Product.findById(productId);
-  if (!product) return res.status(404).json({ message: "Product not found" });
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-  if (user.wishlist.includes(productId)) {
-    return res.status(400).json({ message: "Product already in wishlist" });
+    const product = await Product.findById(productId);
+    if (!product) return res.status(404).json({ message: "Product not found" });
+
+    if (user.wishlist.includes(productId)) {
+      return res.status(400).json({ message: "Product already in wishlist" });
+    }
+
+    user.wishlist.push(productId);
+    await user.save();
+
+    res.status(200).json({ message: "Product added to wishlist", wishlist: user.wishlist });
+  } catch (error) {
+    res.status(400).json({ message: "Something went wrong", error: error });
+
   }
-
-  user.wishlist.push(productId);
-  await user.save();
-
-  res.status(200).json({ message: "Product added to wishlist", wishlist: user.wishlist });
-} catch (error) {
-    res.status(400).json({ message: "Something went wrong", error : error });
-
-}
 });
 
 const removeFromWishlist = asyncHandler(async (req, res) => {
   const { productId } = req.body;
-try {
-  
-  const user = await User.findById(req.user.id);
-  if (!user) return res.status(404).json({ message: "User not found" });
+  try {
 
-  user.wishlist = user.wishlist.filter(
-    (item) => item.toString() !== productId.toString()
-  );
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-  await user.save();
+    user.wishlist = user.wishlist.filter(
+      (item) => item.toString() !== productId.toString()
+    );
 
-  res.status(200).json({ message: "Product removed from wishlist", wishlist: user.wishlist });
-} catch (error) {
-      res.status(400).json({ message: "Something went wrong", error : error });
+    await user.save();
 
-}
+    res.status(200).json({ message: "Product removed from wishlist", wishlist: user.wishlist });
+  } catch (error) {
+    res.status(400).json({ message: "Something went wrong", error: error });
+
+  }
 });
 
 const getWishlist = asyncHandler(async (req, res) => {
   try {
-    
-  const user = await User.findById(req.user.id).populate("wishlist");
-  if (!user) return res.status(404).json({ message: "User not found" });
 
-  res.status(200).json({ wishlist: user.wishlist });
+    const user = await User.findById(req.user.id).populate("wishlist");
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    res.status(200).json({ wishlist: user.wishlist });
   } catch (error) {
-          res.status(400).json({ message: "Something went wrong", error : error });
+    res.status(400).json({ message: "Something went wrong", error: error });
 
   }
 });
 
 
 
- const createTicket = asyncHandler(async (req, res) => {
+const createTicket = asyncHandler(async (req, res) => {
   try {
-    const { category,subject, description } = req.body;
+    const { category, subject, description } = req.body;
 
-    const ticket = await new Ticket ({
-      user: req.user.id, 
+    const ticket = await new Ticket({
+      user: req.user.id,
       category,
       subject,
       description,
@@ -320,7 +338,7 @@ const getWishlist = asyncHandler(async (req, res) => {
 });
 
 // Get all tickets of logged-in user
- const getMyTickets =asyncHandler( async (req, res) => {
+const getMyTickets = asyncHandler(async (req, res) => {
   try {
     const tickets = await Ticket.find({ user: req.user.id }).sort({
       createdAt: -1,
@@ -332,7 +350,7 @@ const getWishlist = asyncHandler(async (req, res) => {
   }
 });
 
-const getTicketById =asyncHandler( async (req, res) => {
+const getTicketById = asyncHandler(async (req, res) => {
   try {
     const ticket = await Ticket.findById(req.params.id);
 
@@ -349,7 +367,7 @@ const getTicketById =asyncHandler( async (req, res) => {
   }
 });
 
- const updateTicketStatus = asyncHandler(async (req, res) => {
+const updateTicketStatus = asyncHandler(async (req, res) => {
   try {
     const { status } = req.body;
     const ticket = await Ticket.findById(req.params.id);
@@ -369,6 +387,146 @@ const getTicketById =asyncHandler( async (req, res) => {
   }
 });
 
+// Admin functions for ticket management
+const getAllTickets = asyncHandler(async (req, res) => {
+  try {
+    const { page = 1, limit = 10, status, category } = req.query;
+    const skip = (page - 1) * limit;
+
+    let filter = {};
+    if (status) filter.status = status;
+    if (category) filter.category = category;
+
+    const tickets = await Ticket.find(filter)
+      .populate('user', 'name email phone')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await Ticket.countDocuments(filter);
+
+    res.status(200).json({
+      success: true,
+      message: "All tickets fetched successfully",
+      data: {
+        tickets,
+        pagination: {
+          current: parseInt(page),
+          pages: Math.ceil(total / limit),
+          total
+        }
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+const getTicketByIdAdmin = asyncHandler(async (req, res) => {
+  try {
+    const ticket = await Ticket.findById(req.params.id).populate('user', 'name email phone');
+
+    if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+
+    res.status(200).json({ success: true, ticket });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+const updateTicketStatusAdmin = asyncHandler(async (req, res) => {
+  try {
+    const { status, adminNote } = req.body;
+    console.log("Tcket status", status, adminNote, req.params.id);
+    const ticket = await Ticket.findById(req.params.id);
+
+    if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+
+    ticket.status = status || ticket.status;
+    if (adminNote) ticket.adminNote = adminNote;
+    ticket.updatedBy = req.user.id;
+    await ticket.save();
+
+    await ticket.populate('user', 'name email phone');
+
+    res.status(200).json({
+      success: true,
+      message: "Ticket status updated successfully",
+      ticket,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+const getTicketStats = asyncHandler(async (req, res) => {
+  try {
+    const stats = await Ticket.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          open: { $sum: { $cond: [{ $eq: ['$status', 'open'] }, 1, 0] } },
+          inProgress: { $sum: { $cond: [{ $eq: ['$status', 'in-progress'] }, 1, 0] } },
+          resolved: { $sum: { $cond: [{ $eq: ['$status', 'resolved'] }, 1, 0] } },
+          closed: { $sum: { $cond: [{ $eq: ['$status', 'closed'] }, 1, 0] } }
+        }
+      }
+    ]);
+
+    const categoryStats = await Ticket.aggregate([
+      {
+        $group: {
+          _id: '$category',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: "Ticket statistics fetched successfully",
+      data: {
+        overview: stats[0] || { total: 0, open: 0, inProgress: 0, resolved: 0, closed: 0 },
+        categoryStats
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+const addTicketReply = asyncHandler(async (req, res) => {
+  try {
+    const { message, isInternal = false } = req.body;
+    console.log("Tcket reply", message, isInternal, req.params.id);
+    const ticket = await Ticket.findById(req.params.id);
+
+    if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+
+    const reply = {
+      message,
+      repliedBy: req.user.id,
+      isInternal,
+      timestamp: new Date()
+    };
+
+    if (!ticket.replies) ticket.replies = [];
+    ticket.replies.push(reply);
+
+    await ticket.save();
+    await ticket.populate('user', 'name email phone');
+    await ticket.populate('replies.repliedBy', 'name email');
+
+    res.status(200).json({
+      success: true,
+      message: "Reply added successfully",
+      ticket,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 
 
@@ -376,4 +534,5 @@ const getTicketById =asyncHandler( async (req, res) => {
 
 
 
-module.exports = {updateTicketStatus,getTicketById,getMyTickets,createTicket,addToWishlist, removeFromWishlist, getWishlist , addAddress, getAddresses, deleteAddress, updateAddress, updateuserById, getuserById, getAllUser, deleteuserById, getGoldprice, setTransactionPin, verifyTransactionPin }
+
+module.exports = { updateTicketStatus, getuserByIds, getTicketById, getMyTickets, createTicket, addToWishlist, removeFromWishlist, getWishlist, addAddress, getAddresses, deleteAddress, updateAddress, updateuserById, getuserById, getAllUser, deleteuserById, getGoldprice, setTransactionPin, verifyTransactionPin, getAllTickets, getTicketByIdAdmin, updateTicketStatusAdmin, getTicketStats, addTicketReply }

@@ -21,15 +21,13 @@ const signUpRequest = asyncHandler(async (req, res) => {
   const { name, email, phone, password, referredBy } = req.body;
 
   if (!name || !email || !password) {
-    res.status(400);
-    throw new Error("Please enter all fields");
+    res.status(400).json({ message: "Please enter all fields" });
   }
   try {
     const userAvailable = await userModel.findOne({ email });
 
     if (userAvailable) {
-      res.status(400);
-      throw new Error("User already exists");
+      res.status(400).json({ message: "User already exists" });
     } else {
 
       const hashedPassword = await bcrypt.hash(password, 12);
@@ -51,7 +49,16 @@ const signUpRequest = asyncHandler(async (req, res) => {
       <p>This code will expire in 10 minutes.</p>
     `;
 
-      await sendEmail(email, "Account activation Code", htmlContent, name);
+      // Try to send email, but don't fail registration if email fails
+      try {
+        await sendEmail(email, "Account activation Code", htmlContent, name);
+        console.log('✅ Email sent successfully to:', email);
+      } catch (emailError) {
+        console.error('❌ Email sending failed:', emailError.message);
+        console.log('⚠️  Continuing with user registration despite email failure...');
+        // Don't throw error - continue with registration
+      }
+      
       const user = await userModel.create({
         name,
         email,

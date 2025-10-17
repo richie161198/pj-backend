@@ -340,3 +340,4 @@ const ChatComponent = () => {
 3. **Environment Variables**: Configure CORS and other settings via environment variables
 4. **SSL/TLS**: Use secure connections in production
 5. **Firewall**: Configure firewall rules for WebSocket connections
+

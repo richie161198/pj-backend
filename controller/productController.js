@@ -12,10 +12,94 @@ const expressAsyncHandler = require("express-async-handler");
 /**
  * Add a single product
  */
+const { getCurrentPrices, calculateProductPrice } = require('../services/priceCalculationService');
+
 const addProduct = expressAsyncHandler(async (req, res) => {
   try {
+    console.log('\n========== ADD PRODUCT ==========');
+    console.log('Product name:', req.body.name);
+    console.log('productDetails from request:', JSON.stringify(req.body.productDetails, null, 2));
+    console.log('priceDetails from request:', JSON.stringify(req.body.priceDetails, null, 2));
+    
     const product = new Product(req.body);
+    
+    console.log('productDetails after Product model creation:', JSON.stringify(product.productDetails, null, 2));
+    console.log('priceDetails after Product model creation:', JSON.stringify(product.priceDetails, null, 2));
+    
+    // ✅ NEW LOGIC: Smart price calculation
+    // If admin provided manual priceDetails with gold/silver, keep them
+    // Otherwise, calculate from productDetails
+    const hasManualGoldSilver = req.body.priceDetails?.some(item => 
+      item.name?.toLowerCase().includes('gold') || item.name?.toLowerCase().includes('silver')
+    );
+
+    if (hasManualGoldSilver) {
+      console.log('✅ Manual gold/silver values detected in priceDetails - keeping them as-is');
+      // Admin manually entered gold/silver in price details, keep them
+      // Just calculate the totals
+      try {
+        const priceDetails = product.priceDetails || [];
+        let total = 0;
+        
+        priceDetails.forEach(item => {
+          if (!item.name?.toLowerCase().includes('total') && 
+              !item.name?.toLowerCase().includes('grand')) {
+            total += parseFloat(item.value) || 0;
+          }
+        });
+        
+        // Update or add Grand Total
+        const grandTotalIndex = priceDetails.findIndex(item => 
+          item.name?.toLowerCase().includes('grand total')
+        );
+        
+        if (grandTotalIndex >= 0) {
+          priceDetails[grandTotalIndex].value = total;
+        } else {
+          priceDetails.push({
+            name: 'Grand Total',
+            weight: 'Final Price',
+            value: total
+          });
+        }
+        
+        product.priceDetails = priceDetails;
+        product.sellingprice = total;
+        
+        console.log('Manual price details kept with calculated total:', total);
+      } catch (e) {
+        console.log('Error calculating manual totals:', e.message);
+      }
+    } else {
+      console.log('🔄 No manual gold/silver - calculating from productDetails');
+      // No manual gold/silver values, calculate from productDetails
+      try {
+        const { goldPrice, silverPrice } = await getCurrentPrices();
+        console.log(`Live rates: Gold=₹${goldPrice}, Silver=₹${silverPrice}`);
+        
+        const makingPctFromBody = Number(req.body?.makingChargesPercentage);
+        const calc = calculateProductPrice(product, goldPrice, silverPrice, isNaN(makingPctFromBody) ? undefined : makingPctFromBody);
+        
+        console.log('Calculation result:');
+        console.log('  - Gold Value:', calc.goldValue);
+        console.log('  - Silver Value:', calc.silverValue);
+        console.log('  - Final Price:', calc.finalPrice);
+        console.log('  - Updated Price Details:', JSON.stringify(calc.updatedPriceDetails, null, 2));
+        
+        product.priceDetails = calc.updatedPriceDetails;
+        product.sellingprice = calc.finalPrice;
+        
+        console.log('priceDetails assigned to product:', JSON.stringify(product.priceDetails, null, 2));
+      } catch (e) {
+        // Continue without blocking product creation
+        console.log('❌ Price calc skipped on addProduct:', e?.message);
+        console.error(e.stack);
+      }
+    }
+    
     await product.save();
+    console.log('Product saved. Final priceDetails:', JSON.stringify(product.priceDetails, null, 2));
+    console.log('========================================\n');
 
     res.status(201).json({
       status: true,
@@ -23,6 +107,7 @@ const addProduct = expressAsyncHandler(async (req, res) => {
       product,
     });
   } catch (error) {
+    console.error('❌ Error in addProduct:', error);
     res.status(500).json({ status: false, message: error.message });
   }
 });
@@ -32,7 +117,13 @@ const addProduct = expressAsyncHandler(async (req, res) => {
  */
 const updateProduct = expressAsyncHandler(async (req, res) => {
   try {
-    const updatedProduct = await Product.findByIdAndUpdate(
+    console.log('\n========== UPDATE PRODUCT ==========');
+    console.log('Product ID:', req.params.id);
+    console.log('Product name:', req.body.name);
+    console.log('productDetails from request:', JSON.stringify(req.body.productDetails, null, 2));
+    console.log('priceDetails from request:', JSON.stringify(req.body.priceDetails, null, 2));
+    
+    let updatedProduct = await Product.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true }
@@ -45,12 +136,90 @@ const updateProduct = expressAsyncHandler(async (req, res) => {
       });
     }
 
+    console.log('productDetails after findByIdAndUpdate:', JSON.stringify(updatedProduct.productDetails, null, 2));
+    console.log('priceDetails after findByIdAndUpdate:', JSON.stringify(updatedProduct.priceDetails, null, 2));
+
+    // ✅ NEW LOGIC: Smart price calculation
+    // If admin provided manual priceDetails with gold/silver, keep them
+    // Otherwise, recalculate from productDetails
+    const hasManualGoldSilver = req.body.priceDetails?.some(item => 
+      item.name?.toLowerCase().includes('gold') || item.name?.toLowerCase().includes('silver')
+    );
+
+    if (hasManualGoldSilver) {
+      console.log('✅ Manual gold/silver values detected in priceDetails - keeping them as-is');
+      // Admin manually entered gold/silver in price details, keep them
+      // Just calculate the totals
+      try {
+        const priceDetails = updatedProduct.priceDetails || [];
+        let total = 0;
+        
+        priceDetails.forEach(item => {
+          if (!item.name?.toLowerCase().includes('total') && 
+              !item.name?.toLowerCase().includes('grand')) {
+            total += parseFloat(item.value) || 0;
+          }
+        });
+        
+        // Update or add Grand Total
+        const grandTotalIndex = priceDetails.findIndex(item => 
+          item.name?.toLowerCase().includes('grand total')
+        );
+        
+        if (grandTotalIndex >= 0) {
+          priceDetails[grandTotalIndex].value = total;
+        } else {
+          priceDetails.push({
+            name: 'Grand Total',
+            weight: 'Final Price',
+            value: total
+          });
+        }
+        
+        updatedProduct.priceDetails = priceDetails;
+        updatedProduct.sellingprice = total;
+        await updatedProduct.save();
+        
+        console.log('Manual price details saved with calculated total:', total);
+      } catch (e) {
+        console.log('Error calculating manual totals:', e.message);
+      }
+    } else {
+      console.log('🔄 No manual gold/silver - recalculating from productDetails');
+      // No manual gold/silver values, calculate from productDetails
+      try {
+        const { goldPrice, silverPrice } = await getCurrentPrices();
+        console.log(`Live rates: Gold=₹${goldPrice}, Silver=₹${silverPrice}`);
+        
+        const makingPctFromBody = Number(req.body?.makingChargesPercentage);
+        const calc = calculateProductPrice(updatedProduct, goldPrice, silverPrice, isNaN(makingPctFromBody) ? undefined : makingPctFromBody);
+        
+        console.log('Calculation result:');
+        console.log('  - Gold Value:', calc.goldValue);
+        console.log('  - Silver Value:', calc.silverValue);
+        console.log('  - Final Price:', calc.finalPrice);
+        console.log('  - Updated Price Details:', JSON.stringify(calc.updatedPriceDetails, null, 2));
+        
+        updatedProduct.priceDetails = calc.updatedPriceDetails;
+        updatedProduct.sellingprice = calc.finalPrice;
+        await updatedProduct.save();
+        
+        console.log('Product saved. Final priceDetails:', JSON.stringify(updatedProduct.priceDetails, null, 2));
+      } catch (e) {
+        console.log('❌ Price calc skipped on updateProduct:', e?.message);
+        console.error(e.stack);
+      }
+    }
+    
+    console.log('========================================\n');
+
     res.status(200).json({
       status: true,
       message: "✅ Product updated successfully",
       updatedProduct,
     });
   } catch (error) {
+    console.error('❌ Error in updateProduct:', error);
     res.status(500).json({ status: false, message: error.message });
   }
 });
@@ -348,6 +517,41 @@ const getAllCategories = expressAsyncHandler(async (req, res) => {
     res.status(500).json({ status: false, message: error.message });
   }
 });
+const getCategoryById = expressAsyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const category = await Category.findById(id);
+    if (!category) {
+      return res.status(404).json({ status: false, message: "Category not found" });
+    }
+    res.status(200).json({ status: true, category });
+  } catch (error) {
+    res.status(500).json({ status: false, message: error.message });
+  }
+});
+
+const deleteCategory = expressAsyncHandler(async (req, res) => {
+  try {
+    const deleted = await Category.findByIdAndDelete(req.params.id);
+
+    if (!deleted) {
+      return res.status(404).json({
+        status: false,
+        message: "❌ Category not found",
+      });
+    }
+
+    res.status(200).json({
+      status: true,
+      message: "🗑️ Category deleted successfully",
+    });
+  } catch (error) {
+    res.status(500).json({ status: false, message: error.message });
+  }
+});
+
+   
+
 
 // Get Category by ID + Products
 const getCategoryWithProducts = expressAsyncHandler(async (req, res) => {
@@ -374,5 +578,5 @@ module.exports = {
   deleteProduct,
   getAllProducts,
   getProductById,
-  bulkUploadProducts,
+  bulkUploadProducts,getCategoryById,deleteCategory
 };

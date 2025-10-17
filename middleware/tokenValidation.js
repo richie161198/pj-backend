@@ -46,18 +46,30 @@ const isAuth = asyncHandler(async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        // console.log("decoded user:", decoded.user.id);
+    console.log("Decoded token:", decoded);
 
-    // const user = await User.findById(decoded.user.id);
-    // console.log("Authenticated user:", user);
+    // Handle both token structures:
+    // User tokens: { user: { id: ..., name: ... } }
+    // Admin tokens: { id: ..., ... }
+    if (decoded.user) {
+      // User token structure
+      req.user = decoded.user;
+      console.log("Authenticated user (user token):", req.user);
+    } else if (decoded.id) {
+      // Admin token structure - normalize it to match user structure
+      req.user = {
+        id: decoded.id,
+        _id: decoded.id,
+        role: 'admin'
+      };
+      console.log("Authenticated user (admin token):", req.user);
+    } else {
+      return res.status(401).json({ status: false, message: "Invalid token structure" });
+    }
 
-    // if (!user) {
-    //   return res.status(401).json({ status: false, message: "User not found" });
-    // }
-
-    req.user = decoded.user;
     next();
   } catch (err) {
+    console.error("Token verification error:", err);
     res.status(401).json({ status: false, message: "Token invalid/expired" });
   }
 });

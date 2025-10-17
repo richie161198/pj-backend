@@ -26,6 +26,25 @@ const ticketSchema = new mongoose.Schema(
       enum: ["open", "in-progress", "resolved", "closed"],
       default: "open",
     },
+    // Admin note visible only in admin tools
+    adminNote: {
+      type: String,
+      default: "",
+    },
+    // Last admin who updated the ticket
+    updatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    // Thread of replies (admin and/or system)
+    replies: [
+      {
+        message: { type: String, required: true },
+        repliedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        isInternal: { type: Boolean, default: false },
+        timestamp: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true }
 );

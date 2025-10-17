@@ -1,0 +1,2128 @@
+[dotenv@17.2.0] injecting env (36) from .env (tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild)
+DB init
+Connecting to MongoDB...
+[dotenv@17.2.0] injecting env (0) from .env (tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' })
+Firebase Admin SDK initialized with service account
+(node:91808) [MONGODB DRIVER] Warning: useNewUrlParser is a deprecated option: useNewUrlParser has no effect since Node.js Driver version 4.0.0 and will be removed in the next major version
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:91808) [MONGODB DRIVER] Warning: useUnifiedTopology is a deprecated option: useUnifiedTopology has no effect since Node.js Driver version 4.0.0 and will be removed in the next major version
+(node:91808) [MONGOOSE] Warning: Duplicate schema index on {"email":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(node:91808) [MONGOOSE] Warning: Duplicate schema index on {"token":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(node:91808) [MONGOOSE] Warning: Duplicate schema index on {"invoiceNumber":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(node:91808) [MONGOOSE] Warning: Duplicate schema index on {"orderId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(node:91808) [MONGOOSE] Warning: Duplicate schema index on {"customerId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+Server on 4000 
+✅ MongoDB Connected: ac-sveyelx-shard-00-00.rtxn0iy.mongodb.net/test
+[0mOPTIONS /api/v0/commerce/updateProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 3.167 ms - 0[0m
+
+========== UPDATE PRODUCT ==========
+Product ID: 68ef3264a66cbd2370f8ef51
+Product name: C08 assa
+productDetails from request: [
+  {
+    "type": "Metal",
+    "attributes": {
+      "color": "yellow",
+      "karat": "24k",
+      "Neil": "789"
+    }
+  },
+  {
+    "type": "Stone",
+    "attributes": {
+      "Diamond": "32",
+      "karat": "2k"
+    }
+  }
+]
+priceDetails from request: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  },
+  {
+    "name": "Gold",
+    "weight": "3.43",
+    "value": "89000"
+  }
+]
+Fields being updated (excluding priceDetails & sellingprice): [
+  'name',               'brand',
+  'description',        'active',
+  'stock',              'CurrentlyNotavaiable',
+  'categories',         'popular',
+  'trending',           'categoryId',
+  'skuId',              'rating',
+  'selectedCaret',      'productDetails',
+  'subtotal',           'Discount',
+  'isDiscountAvaiable', 'gst',
+  'images'
+]
+productDetails after findByIdAndUpdate: [
+  {
+    "type": "Metal",
+    "attributes": {
+      "color": "yellow",
+      "karat": "24k",
+      "Neil": "789"
+    }
+  },
+  {
+    "type": "Stone",
+    "attributes": {
+      "Diamond": "32",
+      "karat": "2k"
+    }
+  }
+]
+Live rates: Gold=₹11200, Silver=₹1002
+
+[Price Calc] Processing product: C08 assa
+[Price Calc] productDetails length: 2
+
+[Price Calc] Detail #0: type="Metal"
+[Price Calc] Attributes object: Map(3) { 'color' => 'yellow', 'karat' => '24k', 'Neil' => '789' }
+[Price Calc] Attributes has .get method: true
+[Price Calc] Attributes keys: [ '$__parent', '$__path', '$__schemaType' ]
+[Price Calc]   getAttr('Karatage') via .get() = undefined
+[Price Calc]   getAttr('karatage') via .get() = undefined
+[Price Calc]   getAttr('Gross Weight') via .get() = undefined
+[Price Calc]   getAttr('gross weight') via .get() = undefined
+[Price Calc]   getAttr('weight') via .get() = undefined
+[Price Calc]   getAttr('Material Colour') via .get() = undefined
+[Price Calc]   getAttr('Material Color') via .get() = undefined
+[Price Calc]   getAttr('material colour') via .get() = undefined
+[Price Calc]   getAttr('material color') via .get() = undefined
+[Price Calc]   getAttr('Metal') via .get() = undefined
+[Price Calc]   getAttr('metal') via .get() = undefined
+[Price Calc] Extracted: karatage="undefined", weight=0, materialColor="", metal=""
+[Price Calc] ❌ Skipped: Missing karatage or weight <= 0
+
+[Price Calc] Detail #1: type="Stone"
+
+[Price Calc] FINAL: Gold=0.00 (0g), Silver=0.00 (0g)
+
+Product: C08 assa
+- Existing Making Charges: 15%, Final: 3450
+- Existing GST: 793.5, Final: 793.5
+- New Metal Value: 0 (Gold: 0, Silver: 0)
+- Preserved Stone Value: 23000, Other Value: 0
+Calculation result:
+  - Gold Value: 0
+  - Silver Value: 0
+  - Final Price: 27243.5
+  - Updated Price Details: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+Product saved. Final priceDetails: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+========================================
+
+[0mPUT /api/v0/commerce/updateProduct/68ef3264a66cbd2370f8ef51 [32m200[0m 183.562 ms - 1393[0m
+[0mOPTIONS /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.220 ms - 0[0m
+[0mOPTIONS /api/v0/commerce/getAllProducts [32m204[0m 0.199 ms - 0[0m
+[0mGET /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m200[0m 42.821 ms - 1341[0m
+[0mGET /api/v0/commerce/getAllProducts [32m200[0m 77.415 ms - 18013[0m
+[0mOPTIONS /api/v0/commerce/updateProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.376 ms - 0[0m
+
+========== UPDATE PRODUCT ==========
+Product ID: 68ef3264a66cbd2370f8ef51
+Product name: C08 assa
+productDetails from request: [
+  {
+    "type": "Metal",
+    "attributes": {
+      "color": "yellow",
+      "karat": "24k",
+      "Neil": "789"
+    }
+  },
+  {
+    "type": "Stone",
+    "attributes": {
+      "Diamond": "32",
+      "karat": "2k"
+    }
+  }
+]
+priceDetails from request: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  },
+  {
+    "name": "yellow gold",
+    "weight": "2.33",
+    "value": ""
+  }
+]
+Fields being updated (excluding priceDetails & sellingprice): [
+  'name',               'brand',
+  'description',        'active',
+  'stock',              'CurrentlyNotavaiable',
+  'categories',         'popular',
+  'trending',           'categoryId',
+  'skuId',              'rating',
+  'selectedCaret',      'productDetails',
+  'subtotal',           'Discount',
+  'isDiscountAvaiable', 'gst',
+  'images'
+]
+productDetails after findByIdAndUpdate: [
+  {
+    "type": "Metal",
+    "attributes": {
+      "color": "yellow",
+      "karat": "24k",
+      "Neil": "789"
+    }
+  },
+  {
+    "type": "Stone",
+    "attributes": {
+      "Diamond": "32",
+      "karat": "2k"
+    }
+  }
+]
+Live rates: Gold=₹11200, Silver=₹1002
+
+[Price Calc] Processing product: C08 assa
+[Price Calc] productDetails length: 2
+
+[Price Calc] Detail #0: type="Metal"
+[Price Calc] Attributes object: Map(3) { 'color' => 'yellow', 'karat' => '24k', 'Neil' => '789' }
+[Price Calc] Attributes has .get method: true
+[Price Calc] Attributes keys: [ '$__parent', '$__path', '$__schemaType' ]
+[Price Calc]   getAttr('Karatage') via .get() = undefined
+[Price Calc]   getAttr('karatage') via .get() = undefined
+[Price Calc]   getAttr('Gross Weight') via .get() = undefined
+[Price Calc]   getAttr('gross weight') via .get() = undefined
+[Price Calc]   getAttr('weight') via .get() = undefined
+[Price Calc]   getAttr('Material Colour') via .get() = undefined
+[Price Calc]   getAttr('Material Color') via .get() = undefined
+[Price Calc]   getAttr('material colour') via .get() = undefined
+[Price Calc]   getAttr('material color') via .get() = undefined
+[Price Calc]   getAttr('Metal') via .get() = undefined
+[Price Calc]   getAttr('metal') via .get() = undefined
+[Price Calc] Extracted: karatage="undefined", weight=0, materialColor="", metal=""
+[Price Calc] ❌ Skipped: Missing karatage or weight <= 0
+
+[Price Calc] Detail #1: type="Stone"
+
+[Price Calc] FINAL: Gold=0.00 (0g), Silver=0.00 (0g)
+
+Product: C08 assa
+- Existing Making Charges: 15%, Final: 3450
+- Existing GST: 793.5, Final: 793.5
+- New Metal Value: 0 (Gold: 0, Silver: 0)
+- Preserved Stone Value: 23000, Other Value: 0
+Calculation result:
+  - Gold Value: 0
+  - Silver Value: 0
+  - Final Price: 27243.5
+  - Updated Price Details: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+Product saved. Final priceDetails: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+========================================
+
+[0mPUT /api/v0/commerce/updateProduct/68ef3264a66cbd2370f8ef51 [32m200[0m 117.255 ms - 1393[0m
+[0mOPTIONS /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.112 ms - 0[0m
+[0mOPTIONS /api/v0/commerce/getAllProducts [32m204[0m 0.175 ms - 0[0m
+[0mGET /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m200[0m 33.647 ms - 1341[0m
+[0mGET /api/v0/commerce/getAllProducts [32m200[0m 71.316 ms - 18013[0m
+[0mOPTIONS /api/v0/admin/login [32m204[0m 0.153 ms - 0[0m
+[0mPOST /api/v0/admin/login [32m200[0m 324.246 ms - 1362[0m
+[0mOPTIONS /api/v0/users/admin/getAllTickets?page=1&limit=10 [32m204[0m 0.246 ms - 0[0m
+[0mOPTIONS /api/v0/users/getAllUser [32m204[0m 0.407 ms - 0[0m
+[0mOPTIONS /api/v0/commerce/getAllProducts [32m204[0m 0.296 ms - 0[0m
+Decoded token: {
+  id: '68d76683e7c575ea53479175',
+  email: 'chandran@preciousjewels.com',
+  role: 'super_admin',
+  permissions: [ 'products_manage', 'orders_manage' ],
+  isActive: true,
+  iat: 1760508119,
+  exp: 1760594519,
+  aud: 'precious-jewels-admin-panel',
+  iss: 'precious-jewels-admin'
+}
+Authenticated user (admin token): {
+  id: '68d76683e7c575ea53479175',
+  _id: '68d76683e7c575ea53479175',
+  role: 'admin'
+}
+[0mOPTIONS /api/v0/order/allorder [32m204[0m 0.050 ms - 0[0m
+[0mOPTIONS /api/v0/commerce/getAllCategories [32m204[0m 0.053 ms - 0[0m
+Decoded token: {
+  id: '68d76683e7c575ea53479175',
+  email: 'chandran@preciousjewels.com',
+  role: 'super_admin',
+  permissions: [ 'products_manage', 'orders_manage' ],
+  isActive: true,
+  iat: 1760508119,
+  exp: 1760594519,
+  aud: 'precious-jewels-admin-panel',
+  iss: 'precious-jewels-admin'
+}
+Authenticated user (admin token): {
+  id: '68d76683e7c575ea53479175',
+  _id: '68d76683e7c575ea53479175',
+  role: 'admin'
+}
+[0mGET /api/v0/order/allorder [36m304[0m 40.506 ms - -[0m
+[0mGET /api/v0/commerce/getAllCategories [36m304[0m 39.738 ms - -[0m
+[0mGET /api/v0/users/getAllUser [36m304[0m 46.860 ms - -[0m
+[0mGET /api/v0/commerce/getAllProducts [36m304[0m 63.883 ms - -[0m
+[0mGET /api/v0/users/admin/getAllTickets?page=1&limit=10 [36m304[0m 110.934 ms - -[0m
+[0mOPTIONS /api/v0/order/admin/allproductorders? [32m204[0m 0.137 ms - 0[0m
+Decoded token: {
+  id: '68d76683e7c575ea53479175',
+  email: 'chandran@preciousjewels.com',
+  role: 'super_admin',
+  permissions: [ 'products_manage', 'orders_manage' ],
+  isActive: true,
+  iat: 1760508119,
+  exp: 1760594519,
+  aud: 'precious-jewels-admin-panel',
+  iss: 'precious-jewels-admin'
+}
+Authenticated user (admin token): {
+  id: '68d76683e7c575ea53479175',
+  _id: '68d76683e7c575ea53479175',
+  role: 'admin'
+}
+[0mGET /api/v0/order/admin/allproductorders? [36m304[0m 202.055 ms - -[0m
+[0mOPTIONS /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.128 ms - 0[0m
+[0mGET /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [36m304[0m 34.075 ms - -[0m
+[0mOPTIONS /api/v0/commerce/updateProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.169 ms - 0[0m
+
+========== UPDATE PRODUCT ==========
+Product ID: 68ef3264a66cbd2370f8ef51
+Product name: C08 assa
+productDetails from request: [
+  {
+    "type": "Metal",
+    "attributes": {
+      "color": "yellow",
+      "karat": "24k",
+      "Neil": "789"
+    }
+  },
+  {
+    "type": "Stone",
+    "attributes": {
+      "Diamond": "32",
+      "karat": "2k"
+    }
+  }
+]
+priceDetails from request: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  },
+  {
+    "name": "Gold",
+    "weight": "2.89",
+    "value": "49999.98"
+  }
+]
+Fields being updated (excluding priceDetails & sellingprice): [
+  'name',               'brand',
+  'description',        'active',
+  'stock',              'CurrentlyNotavaiable',
+  'categories',         'popular',
+  'trending',           'categoryId',
+  'skuId',              'rating',
+  'selectedCaret',      'productDetails',
+  'subtotal',           'Discount',
+  'isDiscountAvaiable', 'gst',
+  'images'
+]
+productDetails after findByIdAndUpdate: [
+  {
+    "type": "Metal",
+    "attributes": {
+      "color": "yellow",
+      "karat": "24k",
+      "Neil": "789"
+    }
+  },
+  {
+    "type": "Stone",
+    "attributes": {
+      "Diamond": "32",
+      "karat": "2k"
+    }
+  }
+]
+Live rates: Gold=₹11200, Silver=₹1002
+
+[Price Calc] Processing product: C08 assa
+[Price Calc] productDetails length: 2
+
+[Price Calc] Detail #0: type="Metal"
+[Price Calc] Attributes object: Map(3) { 'color' => 'yellow', 'karat' => '24k', 'Neil' => '789' }
+[Price Calc] Attributes has .get method: true
+[Price Calc] Attributes keys: [ '$__parent', '$__path', '$__schemaType' ]
+[Price Calc]   getAttr('Karatage') via .get() = undefined
+[Price Calc]   getAttr('karatage') via .get() = undefined
+[Price Calc]   getAttr('Gross Weight') via .get() = undefined
+[Price Calc]   getAttr('gross weight') via .get() = undefined
+[Price Calc]   getAttr('weight') via .get() = undefined
+[Price Calc]   getAttr('Material Colour') via .get() = undefined
+[Price Calc]   getAttr('Material Color') via .get() = undefined
+[Price Calc]   getAttr('material colour') via .get() = undefined
+[Price Calc]   getAttr('material color') via .get() = undefined
+[Price Calc]   getAttr('Metal') via .get() = undefined
+[Price Calc]   getAttr('metal') via .get() = undefined
+[Price Calc] Extracted: karatage="undefined", weight=0, materialColor="", metal=""
+[Price Calc] ❌ Skipped: Missing karatage or weight <= 0
+
+[Price Calc] Detail #1: type="Stone"
+
+[Price Calc] FINAL: Gold=0.00 (0g), Silver=0.00 (0g)
+
+Product: C08 assa
+- Existing Making Charges: 15%, Final: 3450
+- Existing GST: 793.5, Final: 793.5
+- New Metal Value: 0 (Gold: 0, Silver: 0)
+- Preserved Stone Value: 23000, Other Value: 0
+Calculation result:
+  - Gold Value: 0
+  - Silver Value: 0
+  - Final Price: 27243.5
+  - Updated Price Details: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+Product saved. Final priceDetails: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+========================================
+
+[0mPUT /api/v0/commerce/updateProduct/68ef3264a66cbd2370f8ef51 [32m200[0m 113.343 ms - 1393[0m
+[0mOPTIONS /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.213 ms - 0[0m
+[0mOPTIONS /api/v0/commerce/getAllProducts [32m204[0m 0.188 ms - 0[0m
+[0mGET /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m200[0m 32.352 ms - 1341[0m
+[0mGET /api/v0/commerce/getAllProducts [32m200[0m 77.712 ms - 18013[0m
+[0mOPTIONS /api/v0/commerce/updateProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.282 ms - 0[0m
+
+========== UPDATE PRODUCT ==========
+Product ID: 68ef3264a66cbd2370f8ef51
+Product name: C08 assa
+productDetails from request: [
+  {
+    "type": "Metal",
+    "attributes": {
+      "color": "yellow",
+      "karat": "24k",
+      "Neil": "789"
+    }
+  },
+  {
+    "type": "Stone",
+    "attributes": {
+      "Diamond": "32",
+      "karat": "2k"
+    }
+  }
+]
+priceDetails from request: [
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+Fields being updated (excluding priceDetails & sellingprice): [
+  'name',               'brand',
+  'description',        'active',
+  'stock',              'CurrentlyNotavaiable',
+  'categories',         'popular',
+  'trending',           'categoryId',
+  'skuId',              'rating',
+  'selectedCaret',      'productDetails',
+  'subtotal',           'Discount',
+  'isDiscountAvaiable', 'gst',
+  'images'
+]
+productDetails after findByIdAndUpdate: [
+  {
+    "type": "Metal",
+    "attributes": {
+      "color": "yellow",
+      "karat": "24k",
+      "Neil": "789"
+    }
+  },
+  {
+    "type": "Stone",
+    "attributes": {
+      "Diamond": "32",
+      "karat": "2k"
+    }
+  }
+]
+Live rates: Gold=₹11200, Silver=₹1002
+
+[Price Calc] Processing product: C08 assa
+[Price Calc] productDetails length: 2
+
+[Price Calc] Detail #0: type="Metal"
+[Price Calc] Attributes object: Map(3) { 'color' => 'yellow', 'karat' => '24k', 'Neil' => '789' }
+[Price Calc] Attributes has .get method: true
+[Price Calc] Attributes keys: [ '$__parent', '$__path', '$__schemaType' ]
+[Price Calc]   getAttr('Karatage') via .get() = undefined
+[Price Calc]   getAttr('karatage') via .get() = undefined
+[Price Calc]   getAttr('Gross Weight') via .get() = undefined
+[Price Calc]   getAttr('gross weight') via .get() = undefined
+[Price Calc]   getAttr('weight') via .get() = undefined
+[Price Calc]   getAttr('Material Colour') via .get() = undefined
+[Price Calc]   getAttr('Material Color') via .get() = undefined
+[Price Calc]   getAttr('material colour') via .get() = undefined
+[Price Calc]   getAttr('material color') via .get() = undefined
+[Price Calc]   getAttr('Metal') via .get() = undefined
+[Price Calc]   getAttr('metal') via .get() = undefined
+[Price Calc] Extracted: karatage="undefined", weight=0, materialColor="", metal=""
+[Price Calc] ❌ Skipped: Missing karatage or weight <= 0
+
+[Price Calc] Detail #1: type="Stone"
+
+[Price Calc] FINAL: Gold=0.00 (0g), Silver=0.00 (0g)
+
+Product: C08 assa
+- Existing Making Charges: 15%, Final: 3450
+- Existing GST: 793.5, Final: 793.5
+- New Metal Value: 0 (Gold: 0, Silver: 0)
+- Preserved Stone Value: 23000, Other Value: 0
+Calculation result:
+  - Gold Value: 0
+  - Silver Value: 0
+  - Final Price: 27243.5
+  - Updated Price Details: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+Product saved. Final priceDetails: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+========================================
+
+[0mPUT /api/v0/commerce/updateProduct/68ef3264a66cbd2370f8ef51 [32m200[0m 105.620 ms - 1393[0m
+[0mOPTIONS /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.115 ms - 0[0m
+[0mOPTIONS /api/v0/commerce/getAllProducts [32m204[0m 0.114 ms - 0[0m
+[0mGET /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m200[0m 31.046 ms - 1341[0m
+[0mGET /api/v0/commerce/getAllProducts [32m200[0m 70.875 ms - 18013[0m
+[0mOPTIONS /api/v0/admin/login [32m204[0m 0.107 ms - 0[0m
+[0mPOST /api/v0/admin/login [32m200[0m 298.027 ms - 1362[0m
+[0mOPTIONS /api/v0/users/admin/getAllTickets?page=1&limit=10 [32m204[0m 0.117 ms - 0[0m
+[0mOPTIONS /api/v0/users/getAllUser [32m204[0m 0.087 ms - 0[0m
+Decoded token: {
+  id: '68d76683e7c575ea53479175',
+  email: 'chandran@preciousjewels.com',
+  role: 'super_admin',
+  permissions: [ 'products_manage', 'orders_manage' ],
+  isActive: true,
+  iat: 1760508165,
+  exp: 1760594565,
+  aud: 'precious-jewels-admin-panel',
+  iss: 'precious-jewels-admin'
+}
+Authenticated user (admin token): {
+  id: '68d76683e7c575ea53479175',
+  _id: '68d76683e7c575ea53479175',
+  role: 'admin'
+}
+[0mOPTIONS /api/v0/commerce/getAllProducts [32m204[0m 0.085 ms - 0[0m
+[0mOPTIONS /api/v0/order/allorder [32m204[0m 0.045 ms - 0[0m
+[0mOPTIONS /api/v0/commerce/getAllCategories [32m204[0m 0.058 ms - 0[0m
+Decoded token: {
+  id: '68d76683e7c575ea53479175',
+  email: 'chandran@preciousjewels.com',
+  role: 'super_admin',
+  permissions: [ 'products_manage', 'orders_manage' ],
+  isActive: true,
+  iat: 1760508165,
+  exp: 1760594565,
+  aud: 'precious-jewels-admin-panel',
+  iss: 'precious-jewels-admin'
+}
+Authenticated user (admin token): {
+  id: '68d76683e7c575ea53479175',
+  _id: '68d76683e7c575ea53479175',
+  role: 'admin'
+}
+[0mGET /api/v0/users/getAllUser [36m304[0m 35.654 ms - -[0m
+[0mGET /api/v0/order/allorder [36m304[0m 35.060 ms - -[0m
+[0mGET /api/v0/commerce/getAllCategories [36m304[0m 35.606 ms - -[0m
+[0mGET /api/v0/commerce/getAllProducts [36m304[0m 75.262 ms - -[0m
+[0mGET /api/v0/users/admin/getAllTickets?page=1&limit=10 [36m304[0m 99.412 ms - -[0m
+[0mOPTIONS /api/v0/order/admin/allproductorders? [32m204[0m 0.112 ms - 0[0m
+Decoded token: {
+  id: '68d76683e7c575ea53479175',
+  email: 'chandran@preciousjewels.com',
+  role: 'super_admin',
+  permissions: [ 'products_manage', 'orders_manage' ],
+  isActive: true,
+  iat: 1760508165,
+  exp: 1760594565,
+  aud: 'precious-jewels-admin-panel',
+  iss: 'precious-jewels-admin'
+}
+Authenticated user (admin token): {
+  id: '68d76683e7c575ea53479175',
+  _id: '68d76683e7c575ea53479175',
+  role: 'admin'
+}
+[0mGET /api/v0/order/admin/allproductorders? [36m304[0m 219.231 ms - -[0m
+[0mOPTIONS /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.156 ms - 0[0m
+[0mGET /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [36m304[0m 36.125 ms - -[0m
+[0mOPTIONS /api/v0/commerce/updateProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.115 ms - 0[0m
+
+========== UPDATE PRODUCT ==========
+Product ID: 68ef3264a66cbd2370f8ef51
+Product name: C08
+productDetails from request: [
+  {
+    "type": "Metal",
+    "attributes": {
+      "color": "yellow",
+      "karat": "24k",
+      "Neil": "789"
+    }
+  },
+  {
+    "type": "Stone",
+    "attributes": {
+      "Diamond": "32",
+      "karat": "2k"
+    }
+  }
+]
+priceDetails from request: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+Fields being updated (excluding priceDetails & sellingprice): [
+  'name',               'brand',
+  'description',        'active',
+  'stock',              'CurrentlyNotavaiable',
+  'categories',         'popular',
+  'trending',           'categoryId',
+  'skuId',              'rating',
+  'selectedCaret',      'productDetails',
+  'subtotal',           'Discount',
+  'isDiscountAvaiable', 'gst',
+  'images'
+]
+productDetails after findByIdAndUpdate: [
+  {
+    "type": "Metal",
+    "attributes": {
+      "color": "yellow",
+      "karat": "24k",
+      "Neil": "789"
+    }
+  },
+  {
+    "type": "Stone",
+    "attributes": {
+      "Diamond": "32",
+      "karat": "2k"
+    }
+  }
+]
+Live rates: Gold=₹11200, Silver=₹1002
+
+[Price Calc] Processing product: C08
+[Price Calc] productDetails length: 2
+
+[Price Calc] Detail #0: type="Metal"
+[Price Calc] Attributes object: Map(3) { 'color' => 'yellow', 'karat' => '24k', 'Neil' => '789' }
+[Price Calc] Attributes has .get method: true
+[Price Calc] Attributes keys: [ '$__parent', '$__path', '$__schemaType' ]
+[Price Calc]   getAttr('Karatage') via .get() = undefined
+[Price Calc]   getAttr('karatage') via .get() = undefined
+[Price Calc]   getAttr('Gross Weight') via .get() = undefined
+[Price Calc]   getAttr('gross weight') via .get() = undefined
+[Price Calc]   getAttr('weight') via .get() = undefined
+[Price Calc]   getAttr('Material Colour') via .get() = undefined
+[Price Calc]   getAttr('Material Color') via .get() = undefined
+[Price Calc]   getAttr('material colour') via .get() = undefined
+[Price Calc]   getAttr('material color') via .get() = undefined
+[Price Calc]   getAttr('Metal') via .get() = undefined
+[Price Calc]   getAttr('metal') via .get() = undefined
+[Price Calc] Extracted: karatage="undefined", weight=0, materialColor="", metal=""
+[Price Calc] ❌ Skipped: Missing karatage or weight <= 0
+
+[Price Calc] Detail #1: type="Stone"
+
+[Price Calc] FINAL: Gold=0.00 (0g), Silver=0.00 (0g)
+
+Product: C08
+- Existing Making Charges: 15%, Final: 3450
+- Existing GST: 793.5, Final: 793.5
+- New Metal Value: 0 (Gold: 0, Silver: 0)
+- Preserved Stone Value: 23000, Other Value: 0
+Calculation result:
+  - Gold Value: 0
+  - Silver Value: 0
+  - Final Price: 27243.5
+  - Updated Price Details: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+Product saved. Final priceDetails: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+========================================
+
+[0mPUT /api/v0/commerce/updateProduct/68ef3264a66cbd2370f8ef51 [32m200[0m 121.111 ms - 1388[0m
+[0mOPTIONS /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.108 ms - 0[0m
+[0mOPTIONS /api/v0/commerce/getAllProducts [32m204[0m 0.111 ms - 0[0m
+[0mGET /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m200[0m 36.952 ms - 1336[0m
+[0mGET /api/v0/commerce/getAllProducts [32m200[0m 72.137 ms - 18008[0m
+[0mOPTIONS /api/v0/commerce/updateProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.228 ms - 0[0m
+
+========== UPDATE PRODUCT ==========
+Product ID: 68ef3264a66cbd2370f8ef51
+Product name: C08
+productDetails from request: [
+  {
+    "type": "Metal",
+    "attributes": {
+      "color": "yellow",
+      "karat": "24k"
+    }
+  },
+  {
+    "type": "Stone",
+    "attributes": {
+      "Diamond": "32",
+      "karat": "2k"
+    }
+  }
+]
+priceDetails from request: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+Fields being updated (excluding priceDetails & sellingprice): [
+  'name',               'brand',
+  'description',        'active',
+  'stock',              'CurrentlyNotavaiable',
+  'categories',         'popular',
+  'trending',           'categoryId',
+  'skuId',              'rating',
+  'selectedCaret',      'productDetails',
+  'subtotal',           'Discount',
+  'isDiscountAvaiable', 'gst',
+  'images'
+]
+productDetails after findByIdAndUpdate: [
+  {
+    "type": "Metal",
+    "attributes": {
+      "color": "yellow",
+      "karat": "24k"
+    }
+  },
+  {
+    "type": "Stone",
+    "attributes": {
+      "Diamond": "32",
+      "karat": "2k"
+    }
+  }
+]
+Live rates: Gold=₹11200, Silver=₹1002
+
+[Price Calc] Processing product: C08
+[Price Calc] productDetails length: 2
+
+[Price Calc] Detail #0: type="Metal"
+[Price Calc] Attributes object: Map(2) { 'color' => 'yellow', 'karat' => '24k' }
+[Price Calc] Attributes has .get method: true
+[Price Calc] Attributes keys: [ '$__parent', '$__path', '$__schemaType' ]
+[Price Calc]   getAttr('Karatage') via .get() = undefined
+[Price Calc]   getAttr('karatage') via .get() = undefined
+[Price Calc]   getAttr('Gross Weight') via .get() = undefined
+[Price Calc]   getAttr('gross weight') via .get() = undefined
+[Price Calc]   getAttr('weight') via .get() = undefined
+[Price Calc]   getAttr('Material Colour') via .get() = undefined
+[Price Calc]   getAttr('Material Color') via .get() = undefined
+[Price Calc]   getAttr('material colour') via .get() = undefined
+[Price Calc]   getAttr('material color') via .get() = undefined
+[Price Calc]   getAttr('Metal') via .get() = undefined
+[Price Calc]   getAttr('metal') via .get() = undefined
+[Price Calc] Extracted: karatage="undefined", weight=0, materialColor="", metal=""
+[Price Calc] ❌ Skipped: Missing karatage or weight <= 0
+
+[Price Calc] Detail #1: type="Stone"
+
+[Price Calc] FINAL: Gold=0.00 (0g), Silver=0.00 (0g)
+
+Product: C08
+- Existing Making Charges: 15%, Final: 3450
+- Existing GST: 793.5, Final: 793.5
+- New Metal Value: 0 (Gold: 0, Silver: 0)
+- Preserved Stone Value: 23000, Other Value: 0
+Calculation result:
+  - Gold Value: 0
+  - Silver Value: 0
+  - Final Price: 27243.5
+  - Updated Price Details: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+Product saved. Final priceDetails: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+========================================
+
+[0mPUT /api/v0/commerce/updateProduct/68ef3264a66cbd2370f8ef51 [32m200[0m 117.429 ms - 1375[0m
+[0mOPTIONS /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.148 ms - 0[0m
+[0mOPTIONS /api/v0/commerce/getAllProducts [32m204[0m 0.129 ms - 0[0m
+[0mGET /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m200[0m 34.841 ms - 1323[0m
+[0mGET /api/v0/commerce/getAllProducts [32m200[0m 76.684 ms - 17995[0m
+[0mOPTIONS /api/v0/commerce/updateProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.237 ms - 0[0m
+
+========== UPDATE PRODUCT ==========
+Product ID: 68ef3264a66cbd2370f8ef51
+Product name: C08
+productDetails from request: [
+  {
+    "type": "Metal",
+    "attributes": {
+      "color": "yellow",
+      "karat": "24k"
+    }
+  },
+  {
+    "type": "Stone",
+    "attributes": {
+      "Diamond": "32",
+      "karat": "2k"
+    }
+  }
+]
+priceDetails from request: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+Fields being updated (excluding priceDetails & sellingprice): [
+  'name',               'brand',
+  'description',        'active',
+  'stock',              'CurrentlyNotavaiable',
+  'categories',         'popular',
+  'trending',           'categoryId',
+  'skuId',              'rating',
+  'selectedCaret',      'productDetails',
+  'subtotal',           'Discount',
+  'isDiscountAvaiable', 'gst',
+  'images'
+]
+productDetails after findByIdAndUpdate: [
+  {
+    "type": "Metal",
+    "attributes": {
+      "color": "yellow",
+      "karat": "24k"
+    }
+  },
+  {
+    "type": "Stone",
+    "attributes": {
+      "Diamond": "32",
+      "karat": "2k"
+    }
+  }
+]
+Live rates: Gold=₹11200, Silver=₹1002
+
+[Price Calc] Processing product: C08
+[Price Calc] productDetails length: 2
+
+[Price Calc] Detail #0: type="Metal"
+[Price Calc] Attributes object: Map(2) { 'color' => 'yellow', 'karat' => '24k' }
+[Price Calc] Attributes has .get method: true
+[Price Calc] Attributes keys: [ '$__parent', '$__path', '$__schemaType' ]
+[Price Calc]   getAttr('Karatage') via .get() = undefined
+[Price Calc]   getAttr('karatage') via .get() = undefined
+[Price Calc]   getAttr('Gross Weight') via .get() = undefined
+[Price Calc]   getAttr('gross weight') via .get() = undefined
+[Price Calc]   getAttr('weight') via .get() = undefined
+[Price Calc]   getAttr('Material Colour') via .get() = undefined
+[Price Calc]   getAttr('Material Color') via .get() = undefined
+[Price Calc]   getAttr('material colour') via .get() = undefined
+[Price Calc]   getAttr('material color') via .get() = undefined
+[Price Calc]   getAttr('Metal') via .get() = undefined
+[Price Calc]   getAttr('metal') via .get() = undefined
+[Price Calc] Extracted: karatage="undefined", weight=0, materialColor="", metal=""
+[Price Calc] ❌ Skipped: Missing karatage or weight <= 0
+
+[Price Calc] Detail #1: type="Stone"
+
+[Price Calc] FINAL: Gold=0.00 (0g), Silver=0.00 (0g)
+
+Product: C08
+- Existing Making Charges: 15%, Final: 3450
+- Existing GST: 793.5, Final: 793.5
+- New Metal Value: 0 (Gold: 0, Silver: 0)
+- Preserved Stone Value: 23000, Other Value: 0
+Calculation result:
+  - Gold Value: 0
+  - Silver Value: 0
+  - Final Price: 27243.5
+  - Updated Price Details: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+Product saved. Final priceDetails: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+========================================
+
+[0mPUT /api/v0/commerce/updateProduct/68ef3264a66cbd2370f8ef51 [32m200[0m 121.720 ms - 1375[0m
+[0mOPTIONS /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.126 ms - 0[0m
+[0mOPTIONS /api/v0/commerce/getAllProducts [32m204[0m 0.102 ms - 0[0m
+[0mGET /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m200[0m 36.880 ms - 1323[0m
+[0mGET /api/v0/commerce/getAllProducts [32m200[0m 72.046 ms - 17995[0m
+[0mOPTIONS /api/v0/commerce/updateProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.189 ms - 0[0m
+
+========== UPDATE PRODUCT ==========
+Product ID: 68ef3264a66cbd2370f8ef51
+Product name: C08
+productDetails from request: [
+  {
+    "type": "Metal",
+    "attributes": {
+      "color": "yellow",
+      "karat": "24k"
+    }
+  },
+  {
+    "type": "Stone",
+    "attributes": {
+      "Diamond": "32",
+      "karat": "2k"
+    }
+  }
+]
+priceDetails from request: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+Fields being updated (excluding priceDetails & sellingprice): [
+  'name',               'brand',
+  'description',        'active',
+  'stock',              'CurrentlyNotavaiable',
+  'categories',         'popular',
+  'trending',           'categoryId',
+  'skuId',              'rating',
+  'selectedCaret',      'productDetails',
+  'subtotal',           'Discount',
+  'isDiscountAvaiable', 'gst',
+  'images'
+]
+productDetails after findByIdAndUpdate: [
+  {
+    "type": "Metal",
+    "attributes": {
+      "color": "yellow",
+      "karat": "24k"
+    }
+  },
+  {
+    "type": "Stone",
+    "attributes": {
+      "Diamond": "32",
+      "karat": "2k"
+    }
+  }
+]
+Live rates: Gold=₹11200, Silver=₹1002
+
+[Price Calc] Processing product: C08
+[Price Calc] productDetails length: 2
+
+[Price Calc] Detail #0: type="Metal"
+[Price Calc] Attributes object: Map(2) { 'color' => 'yellow', 'karat' => '24k' }
+[Price Calc] Attributes has .get method: true
+[Price Calc] Attributes keys: [ '$__parent', '$__path', '$__schemaType' ]
+[Price Calc]   getAttr('Karatage') via .get() = undefined
+[Price Calc]   getAttr('karatage') via .get() = undefined
+[Price Calc]   getAttr('Gross Weight') via .get() = undefined
+[Price Calc]   getAttr('gross weight') via .get() = undefined
+[Price Calc]   getAttr('weight') via .get() = undefined
+[Price Calc]   getAttr('Material Colour') via .get() = undefined
+[Price Calc]   getAttr('Material Color') via .get() = undefined
+[Price Calc]   getAttr('material colour') via .get() = undefined
+[Price Calc]   getAttr('material color') via .get() = undefined
+[Price Calc]   getAttr('Metal') via .get() = undefined
+[Price Calc]   getAttr('metal') via .get() = undefined
+[Price Calc] Extracted: karatage="undefined", weight=0, materialColor="", metal=""
+[Price Calc] ❌ Skipped: Missing karatage or weight <= 0
+
+[Price Calc] Detail #1: type="Stone"
+
+[Price Calc] FINAL: Gold=0.00 (0g), Silver=0.00 (0g)
+
+Product: C08
+- Existing Making Charges: 15%, Final: 3450
+- Existing GST: 793.5, Final: 793.5
+- New Metal Value: 0 (Gold: 0, Silver: 0)
+- Preserved Stone Value: 23000, Other Value: 0
+Calculation result:
+  - Gold Value: 0
+  - Silver Value: 0
+  - Final Price: 27243.5
+  - Updated Price Details: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+Product saved. Final priceDetails: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+========================================
+
+[0mPUT /api/v0/commerce/updateProduct/68ef3264a66cbd2370f8ef51 [32m200[0m 110.398 ms - 1375[0m
+[0mOPTIONS /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.115 ms - 0[0m
+[0mOPTIONS /api/v0/commerce/getAllProducts [32m204[0m 0.138 ms - 0[0m
+[0mGET /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m200[0m 33.506 ms - 1323[0m
+[0mGET /api/v0/commerce/getAllProducts [32m200[0m 77.591 ms - 17995[0m
+[0mOPTIONS /api/v0/commerce/updateProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.268 ms - 0[0m
+
+========== UPDATE PRODUCT ==========
+Product ID: 68ef3264a66cbd2370f8ef51
+Product name: C08
+productDetails from request: [
+  {
+    "type": "Metal",
+    "attributes": {
+      "color": "yellow",
+      "karat": "24k"
+    }
+  },
+  {
+    "type": "Stone",
+    "attributes": {
+      "Diamond": "32",
+      "karat": "2k"
+    }
+  }
+]
+priceDetails from request: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  },
+  {
+    "name": "Gold",
+    "weight": "22k",
+    "value": "70000"
+  }
+]
+Fields being updated (excluding priceDetails & sellingprice): [
+  'name',               'brand',
+  'description',        'active',
+  'stock',              'CurrentlyNotavaiable',
+  'categories',         'popular',
+  'trending',           'categoryId',
+  'skuId',              'rating',
+  'selectedCaret',      'productDetails',
+  'subtotal',           'Discount',
+  'isDiscountAvaiable', 'gst',
+  'images'
+]
+productDetails after findByIdAndUpdate: [
+  {
+    "type": "Metal",
+    "attributes": {
+      "color": "yellow",
+      "karat": "24k"
+    }
+  },
+  {
+    "type": "Stone",
+    "attributes": {
+      "Diamond": "32",
+      "karat": "2k"
+    }
+  }
+]
+Live rates: Gold=₹11200, Silver=₹1002
+
+[Price Calc] Processing product: C08
+[Price Calc] productDetails length: 2
+
+[Price Calc] Detail #0: type="Metal"
+[Price Calc] Attributes object: Map(2) { 'color' => 'yellow', 'karat' => '24k' }
+[Price Calc] Attributes has .get method: true
+[Price Calc] Attributes keys: [ '$__parent', '$__path', '$__schemaType' ]
+[Price Calc]   getAttr('Karatage') via .get() = undefined
+[Price Calc]   getAttr('karatage') via .get() = undefined
+[Price Calc]   getAttr('Gross Weight') via .get() = undefined
+[Price Calc]   getAttr('gross weight') via .get() = undefined
+[Price Calc]   getAttr('weight') via .get() = undefined
+[Price Calc]   getAttr('Material Colour') via .get() = undefined
+[Price Calc]   getAttr('Material Color') via .get() = undefined
+[Price Calc]   getAttr('material colour') via .get() = undefined
+[Price Calc]   getAttr('material color') via .get() = undefined
+[Price Calc]   getAttr('Metal') via .get() = undefined
+[Price Calc]   getAttr('metal') via .get() = undefined
+[Price Calc] Extracted: karatage="undefined", weight=0, materialColor="", metal=""
+[Price Calc] ❌ Skipped: Missing karatage or weight <= 0
+
+[Price Calc] Detail #1: type="Stone"
+
+[Price Calc] FINAL: Gold=0.00 (0g), Silver=0.00 (0g)
+
+Product: C08
+- Existing Making Charges: 15%, Final: 3450
+- Existing GST: 793.5, Final: 793.5
+- New Metal Value: 0 (Gold: 0, Silver: 0)
+- Preserved Stone Value: 23000, Other Value: 0
+Calculation result:
+  - Gold Value: 0
+  - Silver Value: 0
+  - Final Price: 27243.5
+  - Updated Price Details: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+Product saved. Final priceDetails: [
+  {
+    "name": "Diamond",
+    "weight": "1.4",
+    "value": 23000
+  },
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 3450
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 26450
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 26450
+  },
+  {
+    "name": "GST",
+    "weight": "3%",
+    "value": 793.5
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 27243.5
+  }
+]
+========================================
+
+[0mPUT /api/v0/commerce/updateProduct/68ef3264a66cbd2370f8ef51 [32m200[0m 120.907 ms - 1375[0m
+[0mOPTIONS /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m204[0m 0.205 ms - 0[0m
+[0mOPTIONS /api/v0/commerce/getAllProducts [32m204[0m 0.270 ms - 0[0m
+[0mGET /api/v0/commerce/singleProduct/68ef3264a66cbd2370f8ef51 [32m200[0m 36.979 ms - 1323[0m
+[0mGET /api/v0/commerce/getAllProducts [32m200[0m 69.078 ms - 17995[0m
+[0mOPTIONS /api/v0/commerce/addProduct [32m204[0m 0.156 ms - 0[0m
+
+========== ADD PRODUCT ==========
+Product name: res 23
+productDetails from request: [
+  {
+    "type": "metal",
+    "attributes": {
+      "karat": "22k",
+      "color": "yellow"
+    }
+  }
+]
+productDetails after Product model creation: [
+  {
+    "type": "metal",
+    "attributes": {
+      "karat": "22k",
+      "color": "yellow"
+    }
+  }
+]
+Live rates: Gold=₹11200, Silver=₹1002
+
+[Price Calc] Processing product: res 23
+[Price Calc] productDetails length: 1
+
+[Price Calc] Detail #0: type="metal"
+
+[Price Calc] FINAL: Gold=0.00 (0g), Silver=0.00 (0g)
+
+Product: res 23
+- Existing Making Charges: 0, Final: 0
+- Existing GST: 0, Final: 0
+- New Metal Value: 0 (Gold: 0, Silver: 0)
+- Preserved Stone Value: 0, Other Value: 0
+Calculation result:
+  - Gold Value: 0
+  - Silver Value: 0
+  - Final Price: 0
+  - Updated Price Details: [
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 0
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 0
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 0
+  },
+  {
+    "name": "GST",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 0
+  }
+]
+priceDetails assigned to product: [
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 0
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 0
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 0
+  },
+  {
+    "name": "GST",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 0
+  }
+]
+Product saved. Final priceDetails: [
+  {
+    "name": "Making Charges",
+    "weight": "15%",
+    "value": 0
+  },
+  {
+    "name": "Sub Total",
+    "weight": "0.000g Gross Wt.",
+    "value": 0
+  },
+  {
+    "name": "Discount",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Subtotal after discount",
+    "weight": "After discount",
+    "value": 0
+  },
+  {
+    "name": "GST",
+    "weight": "0%",
+    "value": 0
+  },
+  {
+    "name": "Grand Total",
+    "weight": "Final Price",
+    "value": 0
+  }
+]
+========================================
+
+[0mPOST /api/v0/commerce/addProduct [32m201[0m 78.181 ms - 1026[0m
+[0mOPTIONS /api/v0/commerce/getAllProducts [32m204[0m 0.127 ms - 0[0m
+[0mGET /api/v0/commerce/getAllProducts [32m200[0m 71.036 ms - 18953[0m
+[0mOPTIONS /api/v0/commerce/singleProduct/68ef3aa6f7fb005f89aaca00 [32m204[0m 0.145 ms - 0[0m
+[0mGET /api/v0/commerce/singleProduct/68ef3aa6f7fb005f89aaca00 [32m200[0m 33.906 ms - 983[0m

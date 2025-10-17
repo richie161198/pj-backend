@@ -295,6 +295,178 @@ const placeOrder = async (req, res) => {
     });
 
     await order.save();
+
+    // Automatically create invoice for the order
+    try {
+      const Invoice = require('../models/invoice_model');
+      const User = require('../models/userModel');
+      const Product = require('../models/product_model');
+
+      // Get customer details
+      const customer = await User.findById(req.user.id);
+      if (customer) {
+        // Prepare customer details
+        const customerDetails = {
+          name: customer.name || 'N/A',
+          email: customer.email,
+          phone: customer.phone || 'N/A',
+          address: customer.address && customer.address.length > 0 ? customer.address[0] : {
+            street: 'N/A',
+            city: 'N/A',
+            state: 'N/A',
+            pincode: 'N/A'
+          }
+        };
+
+        // Prepare products with detailed pricing and complete product data
+        const products = await Promise.all(items.map(async (orderItem) => {
+          const product = await Product.findById(orderItem.productDataid);
+          if (!product) {
+            throw new Error(`Product not found: ${orderItem.productDataid}`);
+          }
+
+          // Extract detailed product information
+          const productDetails = product.productDetails || [];
+          const priceDetails = product.priceDetails || [];
+          
+          // Get weight from product details or price details
+          let weight = 0;
+          let purity = '22Karat';
+          let metalType = 'gold';
+          
+          // Extract weight and purity from product details
+          productDetails.forEach(detail => {
+            if (detail.type === 'Metal') {
+              if (detail.attributes && detail.attributes['Gross Weight']) {
+                weight = parseFloat(detail.attributes['Gross Weight']) || 0;
+              }
+              if (detail.attributes && detail.attributes.Karatage) {
+                purity = detail.attributes.Karatage;
+              }
+              if (detail.attributes && detail.attributes.Material) {
+                metalType = detail.attributes.Material.toLowerCase();
+              }
+            }
+          });
+
+          // Calculate pricing details from priceDetails or use defaults
+          const unitPrice = product.sellingprice || 0;
+          const totalPrice = unitPrice * orderItem.quantity;
+          
+          // Extract making charges, GST, and discount from priceDetails
+          let makingCharges = 0;
+          let gst = 0;
+          let discount = 0;
+          
+          priceDetails.forEach(price => {
+            if (price.name === 'Making Charges') {
+              makingCharges = (parseFloat(price.value) || 0) * orderItem.quantity;
+            } else if (price.name === 'GST') {
+              gst = (parseFloat(price.value) || 0) * orderItem.quantity;
+            } else if (price.name === 'Discount') {
+              discount = (parseFloat(price.value) || 0) * orderItem.quantity;
+            }
+          });
+
+          // If no making charges found in priceDetails, calculate from percentage
+          if (makingCharges === 0) {
+            const goldValue = priceDetails.find(p => p.name === 'Gold')?.value || 0;
+            const makingChargesPercentage = priceDetails.find(p => p.name === 'Making Charges')?.weight;
+            if (makingChargesPercentage && makingChargesPercentage.includes('%')) {
+              const percentage = parseFloat(makingChargesPercentage.replace('%', '')) / 100;
+              makingCharges = (goldValue * percentage) * orderItem.quantity;
+            }
+          }
+
+          // If no GST found in priceDetails, use the product's GST field
+          if (gst === 0 && product.gst) {
+            gst = (totalPrice * product.gst / 100) * orderItem.quantity;
+          }
+
+          // If no discount found in priceDetails, use the product's Discount field
+          if (discount === 0 && product.Discount) {
+            discount = (totalPrice * product.Discount / 100) * orderItem.quantity;
+          }
+
+          const finalPrice = totalPrice + makingCharges + gst - discount;
+
+          return {
+            productId: product._id,
+            name: product.name,
+            sku: product.skuId || 'N/A',
+            category: product.categories || 'N/A',
+            brand: product.brand || 'N/A',
+            quantity: orderItem.quantity,
+            unitPrice,
+            totalPrice,
+            weight: weight,
+            metalType: metalType,
+            purity: purity,
+            makingCharges,
+            gst,
+            discount,
+            finalPrice,
+            // Store complete product details for invoice
+            productDetails: productDetails,
+            priceDetails: priceDetails,
+            images: product.images || [],
+            description: product.description || '',
+            selectedCaret: product.selectedCaret || purity
+          };
+        }));
+
+        // Calculate totals
+        const subtotal = products.reduce((sum, product) => sum + product.totalPrice, 0);
+        const totalMakingCharges = products.reduce((sum, product) => sum + product.makingCharges, 0);
+        const totalGST = products.reduce((sum, product) => sum + product.gst, 0);
+        const totalDiscount = products.reduce((sum, product) => sum + product.discount, 0);
+        const grandTotal = subtotal + totalMakingCharges + totalGST - totalDiscount;
+
+        // Generate invoice number
+        const invoiceCount = await Invoice.countDocuments();
+        const year = new Date().getFullYear();
+        const month = String(new Date().getMonth() + 1).padStart(2, '0');
+        const day = String(new Date().getDate()).padStart(2, '0');
+        const sequence = String(invoiceCount + 1).padStart(4, '0');
+        const invoiceNumber = `INV-${year}${month}${day}-${sequence}`;
+
+        // Create invoice
+        const invoice = new Invoice({
+          invoiceNumber,
+          orderId: order._id,
+          customerId: req.user.id,
+          customerDetails,
+          products,
+          pricing: {
+            subtotal,
+            totalMakingCharges,
+            totalGST,
+            totalDiscount,
+            grandTotal,
+            currency: 'INR'
+          },
+          paymentDetails: {
+            method: 'cash',
+            paymentStatus: 'pending',
+            paidAmount: 0
+          },
+          shippingDetails: {
+            method: 'standard',
+            shippingAddress: customerDetails.address
+          },
+          status: 'draft',
+          createdBy: req.user.id, // Using user ID as admin for now
+          dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days from now
+        });
+
+        await invoice.save();
+        console.log('Invoice created automatically for order:', order._id);
+      }
+    } catch (invoiceError) {
+      console.error('Error creating automatic invoice:', invoiceError);
+      // Don't fail the order if invoice creation fails
+    }
+
     res.status(201).json({ success: true, message: "Order placed", order });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -339,16 +511,273 @@ const refundOrder = async (req, res) => {
 
 // Get Order History
 const getOrderHistory = async (req, res) => {
+  console.log(req.user.id);
   try {
     const orders = await productOrder.find({ user: req.user.id }).sort({ createdAt: -1 }).populate("items.productDataid");
+     console.log("req.user.id",orders);
     res.json({ success: true, orders });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 };
 
+// ==========================
+// ADMIN: GET ALL ORDERS WITH PAGINATION AND FILTERING
+// ==========================
+const getAllOrdersAdmin = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      status,
+      type,
+      startDate,
+      endDate,
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
 
+    // Build filter object
+    const filter = {};
+    
+    if (status) {
+      filter.status = status;
+    }
+    
+    if (type) {
+      filter.type = type;
+    }
+    
+    if (startDate || endDate) {
+      filter.createdAt = {};
+      if (startDate) {
+        filter.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        filter.createdAt.$lte = new Date(endDate);
+      }
+    }
+    
+    if (search) {
+      filter.$or = [
+        { orderId: { $regex: search, $options: 'i' } },
+        { 'user.name': { $regex: search, $options: 'i' } },
+        { 'user.email': { $regex: search, $options: 'i' } }
+      ];
+    }
 
+    // Build sort object
+    const sort = {};
+    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Get orders with pagination and populate user data
+    const orders = await transactionSchema
+      .find(filter)
+      .populate('userId', 'name email phone')
+      .sort(sort)
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // Get total count for pagination
+    const totalOrders = await transactionSchema.countDocuments(filter);
+    const totalPages = Math.ceil(totalOrders / parseInt(limit));
+
+    // Calculate summary statistics
+    const stats = await transactionSchema.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: '$amount' },
+          totalOrders: { $sum: 1 },
+          averageOrderValue: { $avg: '$amount' }
+        }
+      }
+    ]);
+
+    const summary = stats.length > 0 ? stats[0] : {
+      totalAmount: 0,
+      totalOrders: 0,
+      averageOrderValue: 0
+    };
+
+    res.status(200).json({
+      status: true,
+      message: "All orders fetched successfully for admin",
+      data: {
+        orders,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages,
+          totalOrders,
+          hasNextPage: parseInt(page) < totalPages,
+          hasPrevPage: parseInt(page) > 1,
+          limit: parseInt(limit)
+        },
+        summary: {
+          totalAmount: summary.totalAmount,
+          totalOrders: summary.totalOrders,
+          averageOrderValue: Math.round(summary.averageOrderValue * 100) / 100
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching orders for admin:", error);
+    res.status(500).json({ 
+      status: false, 
+      message: "Error fetching orders", 
+      error: error.message 
+    });
+  }
+};
+
+// ==========================
+// ADMIN: GET ALL PRODUCT ORDERS WITH PAGINATION AND FILTERING
+// ==========================
+const getAllProductOrdersAdmin = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      status,
+      paymentStatus,
+      startDate,
+      endDate,
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    // Build filter object
+    const filter = {};
+    
+    if (status) {
+      filter.status = status;
+    }
+    
+    if (paymentStatus) {
+      filter.paymentStatus = paymentStatus;
+    }
+    
+    if (startDate || endDate) {
+      filter.createdAt = {};
+      if (startDate) {
+        filter.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        filter.createdAt.$lte = new Date(endDate);
+      }
+    }
+    
+    if (search) {
+      filter.$or = [
+        { orderId: { $regex: search, $options: 'i' } },
+        { 'user.name': { $regex: search, $options: 'i' } },
+        { 'user.email': { $regex: search, $options: 'i' } },
+        { 'items.productDataid.name': { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Build sort object
+    const sort = {};
+    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Get product orders with pagination and populate user and product data
+    const orders = await productOrder
+      .find(filter)
+      .populate('user', 'name email phone')
+      .populate('items.productDataid', 'name brand price images')
+      .sort(sort)
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // Get total count for pagination
+    const totalOrders = await productOrder.countDocuments(filter);
+    const totalPages = Math.ceil(totalOrders / parseInt(limit));
+
+    // Calculate summary statistics
+    const stats = await productOrder.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: '$totalAmount' },
+          totalOrders: { $sum: 1 },
+          averageOrderValue: { $avg: '$totalAmount' }
+        }
+      }
+    ]);
+
+    const summary = stats.length > 0 ? stats[0] : {
+      totalAmount: 0,
+      totalOrders: 0,
+      averageOrderValue: 0
+    };
+
+    // Get status-wise breakdown
+    const statusBreakdown = await productOrder.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          totalAmount: { $sum: '$totalAmount' }
+        }
+      }
+    ]);
+
+    // Get payment status breakdown
+    const paymentStatusBreakdown = await productOrder.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: '$paymentStatus',
+          count: { $sum: 1 },
+          totalAmount: { $sum: '$totalAmount' }
+        }
+      }
+    ]);
+
+    res.status(200).json({
+      status: true,
+      message: "All product orders fetched successfully for admin",
+      data: {
+        orders,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages,
+          totalOrders,
+          hasNextPage: parseInt(page) < totalPages,
+          hasPrevPage: parseInt(page) > 1,
+          limit: parseInt(limit)
+        },
+        summary: {
+          totalAmount: summary.totalAmount,
+          totalOrders: summary.totalOrders,
+          averageOrderValue: Math.round(summary.averageOrderValue * 100) / 100
+        },
+        breakdown: {
+          status: statusBreakdown,
+          paymentStatus: paymentStatusBreakdown
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching product orders for admin:", error);
+    res.status(500).json({ 
+      status: false, 
+      message: "Error fetching product orders", 
+      error: error.message 
+    });
+  }
+};
 
 module.exports = {
   placeOrder, returnOrder, refundOrder, getOrderHistory,
@@ -357,5 +786,8 @@ module.exports = {
   getUserOrderHistory,
   getParticularOrderHistory,
   depositINR,
-  withdrawINR, createOrder
+  withdrawINR, 
+  createOrder,
+  getAllOrdersAdmin,
+  getAllProductOrdersAdmin
 };
