@@ -62,6 +62,46 @@ app.get("/", (req, res) => {
   console.log("api is working properly");
 });
 
+// Test banner endpoint
+app.get("/test-banner", async (req, res) => {
+  try {
+    const Banner = require('./models/banner_model');
+    
+    // Test banner creation
+    const testBanner = new Banner({
+      title: 'Test Banner',
+      description: 'This is a test banner',
+      imageUrl: 'https://example.com/test-image.jpg',
+      publicId: 'test-public-id',
+      imageWidth: 1200,
+      imageHeight: 600,
+      imageFormat: 'jpg',
+      imageBytes: 50000,
+      position: 1,
+      isActive: true,
+      targetAudience: 'all',
+      createdBy: new require('mongoose').Types.ObjectId()
+    });
+
+    const savedBanner = await testBanner.save();
+    console.log('Test banner created successfully:', savedBanner);
+
+    res.json({
+      success: true,
+      message: 'Banner test successful',
+      data: savedBanner
+    });
+
+  } catch (error) {
+    console.error('Error testing banner:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Banner test failed',
+      error: error.message
+    });
+  }
+});
+
 
 // app.use("/api/v1", apiRoutes);
 
@@ -344,6 +384,26 @@ app.use("/api/v0/chat", require("./routers/chatRouter"));
 app.use("/api/v0/notifications", require("./routers/notificationRouter"));
 app.use("/api/v0/maintenance", require("./routers/maintenanceRouter"));
 app.use("/api/v0/invoices", require("./routers/invoiceRouter"));
+app.use("/api/v0/banners", require("./routers/bannerRouter"));
+
+// Debug banner routes
+app.get("/debug-banner-routes", (req, res) => {
+  res.json({
+    success: true,
+    message: "Banner routes are loaded",
+    routes: [
+      "GET /api/v0/banners/active",
+      "GET /api/v0/banners/stats", 
+      "GET /api/v0/banners",
+      "POST /api/v0/banners",
+      "GET /api/v0/banners/:id",
+      "PUT /api/v0/banners/:id",
+      "DELETE /api/v0/banners/:id",
+      "PATCH /api/v0/banners/:id/toggle",
+      "PATCH /api/v0/banners/:id/position"
+    ]
+  });
+});
 
 
 // Start server
@@ -868,3 +928,6 @@ io.on('connection', (socket) => {
 server.listen(process.env.PORT, () => {
   console.log(`Server on ${process.env.PORT} `);
 });
+
+
+// 23/10/2025 5:00 PM

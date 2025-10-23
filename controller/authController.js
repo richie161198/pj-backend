@@ -101,19 +101,17 @@ const signInRequest = asyncHandler(async (req, res) => {
   console.log(email, password);
 
   if (!email || !password) {
-    res.status(400);
-    throw new Error("Please enter all fields");
+    res.status(400).json({ status:false,message: "Please enter all fields" });
   }
   const user = await userModel.findOne({ email });
 
   if (!user) {
-    res.status(400);
-    throw new Error("User not found");
+    res.status(400).json({ status:false,message: "User not found" });
   }
   const userAvailable = await bcrypt.compare(password, user.password);
   if (!userAvailable) {
-    res.status(400);
-    throw new Error("Invalid password");
+    res.status(400).json({ status:false,message: "Invalid password" });
+    return;
   }
   console.log("approved");
 

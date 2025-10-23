@@ -7,7 +7,7 @@ const getPolicyByType = asyncHandler(async (req, res) => {
     const { type } = req.params;
 
     // Validate type
-    const validTypes = ['privacy', 'return', 'shipping', 'cancellation', 'terms'];
+    const validTypes = ['privacy', 'return', 'shipping', 'cancellation', 'terms','grievance',"redemption"];
     if (!validTypes.includes(type)) {
       return res.status(400).json({
         status: false,
@@ -78,7 +78,7 @@ console.log("Parsed Input:", { type, title, content });
     }
 
     // Validate type
-    const validTypes = ['privacy', 'return', 'shipping', 'cancellation', 'terms'];
+    const validTypes = ['privacy', 'return', 'shipping', 'cancellation', 'terms','grievance','redemption'];
     if (!validTypes.includes(type)) {
       return res.status(400).json({
         status: false,

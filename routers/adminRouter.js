@@ -33,7 +33,7 @@ const {
 // @route   POST /api/v0/admin/register
 // @desc    Register new admin
 // @access  Private (Super Admin/Admin only)
-router.post('/register', 
+router.post('/register',
   adminAuth,
   requireRole('super_admin', 'admin'),
   validateAdminRegistration,
@@ -43,7 +43,7 @@ router.post('/register',
 // @route   POST /api/v0/admin/login
 // @desc    Login admin
 // @access  Public
-router.post('/login', 
+router.post('/login',
   validateAdminLogin,
   loginAdmin
 );
@@ -51,7 +51,7 @@ router.post('/login',
 // @route   GET /api/v0/admin/profile
 // @desc    Get current admin profile
 // @access  Private
-router.get('/profile', 
+router.get('/profile',
   adminAuth,
   getAdminProfile
 );
@@ -59,7 +59,7 @@ router.get('/profile',
 // @route   PUT /api/v0/admin/profile
 // @desc    Update admin profile
 // @access  Private
-router.put('/profile', 
+router.put('/profile',
   adminAuth,
   validateAdminProfileUpdate,
   updateAdminProfile
@@ -68,7 +68,7 @@ router.put('/profile',
 // @route   PUT /api/v0/admin/change-password
 // @desc    Change admin password
 // @access  Private
-router.put('/change-password', 
+router.put('/change-password',
   adminAuth,
   validatePasswordChange,
   changePassword
@@ -77,7 +77,7 @@ router.put('/change-password',
 // @route   POST /api/v0/admin/refresh-token
 // @desc    Refresh admin token
 // @access  Public
-router.post('/refresh-token', 
+router.post('/refresh-token',
   validateRefreshToken,
   refreshToken
 );
@@ -85,7 +85,7 @@ router.post('/refresh-token',
 // @route   POST /api/v0/admin/logout
 // @desc    Logout admin
 // @access  Private
-router.post('/logout', 
+router.post('/logout',
   adminAuth,
   logoutAdmin
 );
@@ -93,7 +93,7 @@ router.post('/logout',
 // @route   GET /api/v0/admin/admins
 // @desc    Get all admins
 // @access  Private (Admin/Super Admin only)
-router.get('/admins', 
+router.get('/admins',
   adminAuth,
   requireRole('super_admin', 'admin'),
   getAllAdmins
@@ -102,7 +102,7 @@ router.get('/admins',
 // @route   GET /api/v0/admin/stats
 // @desc    Get admin statistics
 // @access  Private (Admin/Super Admin only)
-router.get('/stats', 
+router.get('/stats',
   adminAuth,
   requireRole('super_admin', 'admin'),
   getAdminStats
@@ -111,7 +111,7 @@ router.get('/stats',
 // @route   GET /api/v0/admin/:id
 // @desc    Get single admin by ID
 // @access  Private (Admin/Super Admin only)
-router.get('/:id', 
+router.get('/:id',
   adminAuth,
   requireRole('super_admin', 'admin'),
   getAdminById
@@ -120,7 +120,7 @@ router.get('/:id',
 // @route   PUT /api/v0/admin/:id
 // @desc    Update admin by ID
 // @access  Private (Super Admin only)
-router.put('/:id', 
+router.put('/:id',
   adminAuth,
   requireRole('super_admin'),
   validateAdminUpdate,
@@ -130,7 +130,7 @@ router.put('/:id',
 // @route   DELETE /api/v0/admin/:id
 // @desc    Delete admin by ID
 // @access  Private (Super Admin only)
-router.delete('/:id', 
+router.delete('/:id',
   adminAuth,
   requireRole('super_admin'),
   deleteAdminById
@@ -139,7 +139,7 @@ router.delete('/:id',
 // @route   PUT /api/v0/admin/:id/password
 // @desc    Update admin password by ID
 // @access  Private (Super Admin only)
-router.put('/:id/password', 
+router.put('/:id/password',
   adminAuth,
   requireRole('super_admin'),
   validateAdminPasswordUpdate,

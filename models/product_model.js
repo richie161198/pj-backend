@@ -36,9 +36,9 @@ const productSchema = new mongoose.Schema(
       type: Number, 
       default: 0,
       min: 0,
-      set: function(value) {
-        return Math.round(value * 100) / 100; // Round to 2 decimal places
-      }
+      // set: function(value) {
+      //   return Math.round(value * 100) / 100; // Round to 2 decimal places
+      // }
     },
     selectedCaret: { type: String },
 
