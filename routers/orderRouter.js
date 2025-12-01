@@ -3,9 +3,8 @@ const express = require("express");
 const {
   getAllOrderHistory,
   getUserOrderHistory,
-  getParticularOrderHistory, depositINR, withdrawINR, buyOrSellGold, placeOrder, returnOrder, refundOrder, getOrderHistory,
-  createOrder, getAllOrdersAdmin, getAllProductOrdersAdmin} = require("../controller/orderController")
-// const { validateToken } = require("../middleware/tokenValidation");
+  getParticularOrderHistory, depositINR, withdrawINR, buyOrSellGold,generateTokenPhonePe,createOrderPhonePe, placeOrder, returnOrder, refundOrder, createReturnRefundRequest, getOrderHistory,
+   getAllOrdersAdmin, getAllProductOrdersAdmin, getAllReturnRefundRequestsAdmin,checkPhonePeOrderStatus, acceptReturnRefundRequest, rejectReturnRefundRequest, getReturnRefundRequestByOrderId, getUserReturnRefundHistory, getInvestmentOrdersByMonth, getTotalRevenue, getTotalInvestmentOrders} = require("../controller/orderController")
 const { isAuth } = require("../middleware/tokenValidation");
 
 const router = express.Router();
@@ -19,15 +18,26 @@ router.route("/orderGold").post(isAuth,buyOrSellGold);
 router.route("/allorder").get(getAllOrderHistory);
 router.route("/admin/allorders").get(isAuth, getAllOrdersAdmin);
 router.route("/admin/allproductorders").get(isAuth, getAllProductOrdersAdmin);
+router.route("/admin/investmentOrdersByMonth").get(isAuth, getInvestmentOrdersByMonth);
+router.route("/admin/totalRevenue").get(isAuth, getTotalRevenue);
+router.route("/admin/totalInvestmentOrders").get(isAuth, getTotalInvestmentOrders);
+router.route("/admin/returnRefundRequests").get(isAuth, getAllReturnRefundRequestsAdmin);
+router.route("/admin/acceptReturnRefundRequest").post(isAuth, acceptReturnRefundRequest);
+router.route("/admin/rejectReturnRefundRequest").post(isAuth, rejectReturnRefundRequest);
 router.route("/userOrderHistory").get(isAuth,getUserOrderHistory);
 router.route("/orderTransaction").get(isAuth,getParticularOrderHistory);
-router.route("/create-order").post(isAuth,createOrder);
 
 
+router.post("/generateTokenPhonePe", generateTokenPhonePe);
+router.post("/createOrderPhonePe", createOrderPhonePe);
+router.post("/checkPhonePeOrderStatus", checkPhonePeOrderStatus);
 
 router.route("/placeOrder").post(isAuth,placeOrder);
 router.route("/refundOrder").post(isAuth,refundOrder);
 router.route("/returnOrder").post(isAuth,returnOrder);
+router.post("/returnRefundRequest", isAuth, createReturnRefundRequest);
+router.get("/returnRefundRequest/:orderId", isAuth, getReturnRefundRequestByOrderId);
+router.get("/returnRefundHistory", isAuth, getUserReturnRefundHistory);
 router.route("/getOrderHistory").get(isAuth,getOrderHistory);
 
 

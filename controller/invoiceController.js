@@ -158,16 +158,27 @@ const getAllInvoices = asyncHandler(async (req, res) => {
   } = req.query;
 
   try {
+    console.log('📋 Commerce Invoices Query Params:', { page, limit, status, customerId, startDate, endDate, search });
+    
     const query = {};
 
     // Add filters
-    if (status) query.status = status;
+    if (status && status !== 'all') query.status = status;
     if (customerId) query.customerId = customerId;
     
     if (startDate || endDate) {
       query.createdAt = {};
-      if (startDate) query.createdAt.$gte = new Date(startDate);
-      if (endDate) query.createdAt.$lte = new Date(endDate);
+      if (startDate) {
+        const startDateTime = new Date(startDate);
+        startDateTime.setHours(0, 0, 0, 0);
+        query.createdAt.$gte = startDateTime;
+      }
+      if (endDate) {
+        const endDateTime = new Date(endDate);
+        endDateTime.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = endDateTime;
+      }
+      console.log('📅 Date filter applied:', query.createdAt);
     }
 
     if (search) {
@@ -177,6 +188,8 @@ const getAllInvoices = asyncHandler(async (req, res) => {
         { 'customerDetails.email': { $regex: search, $options: 'i' } }
       ];
     }
+
+    console.log('🔍 Final query:', JSON.stringify(query, null, 2));
 
     const invoices = await Invoice.find(query)
       .populate('customerId', 'name email phone')
@@ -1054,6 +1067,131 @@ const getInvoiceStats = asyncHandler(async (req, res) => {
 //   `;
 // };
 
+
+// Download invoice by order code/ID
+const downloadInvoiceByOrderCode = asyncHandler(async (req, res) => {
+  try {
+    const { orderCode } = req.params;
+    console.log(`🔍 Looking for invoice with order code: ${orderCode}`);
+
+    // First, find the order by orderCode
+    const ProductOrder = require('../models/commerce_order_model');
+    const order = await ProductOrder.findOne({ orderCode: orderCode });
+
+    if (!order) {
+      console.log(`❌ Order not found for order code: ${orderCode}`);
+      return res.status(404).json({
+        status: false,
+        message: 'Order not found'
+      });
+    }
+
+    console.log(`✅ Order found: ${order._id}`);
+
+    // Now find the invoice by orderId (MongoDB ObjectId)
+    const invoice = await Invoice.findOne({ orderId: order._id })
+      .populate('customerId', 'name email phone')
+      .populate('orderId', 'orderCode status')
+      .populate('createdBy', 'name email');
+
+    if (!invoice) {
+      console.log(`❌ Invoice not found for order: ${order._id}`);
+      return res.status(404).json({
+        status: false,
+        message: 'Invoice not found for this order. It may not have been generated yet.'
+      });
+    }
+
+    console.log(`✅ Invoice found: ${invoice._id}`);
+
+    // Fetch required models
+    const Product = require('../models/product_model');
+    const InvestmentSettings = require('../models/investment_settings_model');
+    
+    // Latest gold rates
+    const investmentSettings = await InvestmentSettings.findOne().sort({ createdAt: -1 });
+    
+    // Enhance product info
+    const enhancedProducts = await Promise.all(
+      invoice.products.map(async (product) => {
+        const fullProduct = await Product.findById(product.productId);
+        if (fullProduct) {
+          const productDetails = fullProduct.productDetails || [];
+          const priceDetails = fullProduct.priceDetails || [];
+          
+          let weight = product.weight || 0;
+          let purity = product.purity || '22Karat';
+          let metalType = product.metalType || 'gold';
+          
+          productDetails.forEach(detail => {
+            if (detail.type === 'Metal') {
+              if (detail.attributes?.['Gross Weight']) {
+                weight = parseFloat(detail.attributes['Gross Weight']) || weight;
+              }
+              if (detail.attributes?.Karatage) {
+                purity = detail.attributes.Karatage;
+              }
+              if (detail.attributes?.Material) {
+                metalType = detail.attributes.Material.toLowerCase();
+              }
+            }
+          });
+
+          return {
+            ...product.toObject?.() || product,
+            name: fullProduct.name || product.name || 'N/A',
+            description: fullProduct.description || '',
+            images: fullProduct.images || [],
+            weight,
+            purity,
+            metalType,
+            productDetails,
+            priceDetails
+          };
+        }
+        return typeof product.toObject === 'function' ? product.toObject() : product;
+      })
+    );
+
+    const enhancedInvoice = {
+      ...invoice.toObject(),
+      products: enhancedProducts,
+      investmentSettings
+    };
+
+    const html = generateInvoiceHTML(enhancedInvoice);
+
+    // Generate PDF using Puppeteer
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    
+    const pdf = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' }
+    });
+
+    await browser.close();
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`);
+    res.setHeader('Content-Length', pdf.length);
+    res.send(pdf);
+
+  } catch (error) {
+    console.error('❌ Error generating invoice PDF:', error);
+    res.status(500).json({
+      status: false,
+      message: 'Error generating invoice PDF',
+      error: error.message
+    });
+  }
+});
 
 const downloadInvoice = asyncHandler(async (req, res) => {
   try {
@@ -2135,6 +2273,7 @@ module.exports = {
   deleteInvoice,
   getInvoiceStats,
   downloadInvoice,
+  downloadInvoiceByOrderCode,
   updateInvoiceProductData,
   createTestInvoice,
   debugProductData

@@ -1,5 +1,5 @@
 const asyncHandler = require("express-async-handler");
-const { updateTicketStatus, getTicketById, getMyTickets, createTicket, addToWishlist, removeFromWishlist, getWishlist, updateuserById, getuserById, getAllUser, addAddress, getAddresses, deleteAddress, deleteuserById, setTransactionPin, verifyTransactionPin, updateAddress, getuserByIds, getAllTickets, getTicketByIdAdmin, updateTicketStatusAdmin, getTicketStats, addTicketReply } = require("../controller/userContoller")
+const { updateTicketStatus, getTicketById, getMyTickets, createTicket, addToWishlist, removeFromWishlist, getWishlist, updateuserById, getuserById, getAllUser, addAddress, getAddresses, deleteAddress, deleteuserById, setTransactionPin, verifyTransactionPin, updateAddress, getuserByIds, getAllTickets, getTicketByIdAdmin, updateTicketStatusAdmin, getTicketStats, addTicketReply, getReferredUsers, getReferralStats } = require("../controller/userContoller")
 const express = require("express");
 const multer = require('multer');
 const { isAuth } = require("../middleware/tokenValidation");
@@ -42,6 +42,10 @@ router.route("/admin/getTicketById/:id").get(isAuth, getTicketByIdAdmin);
 router.route("/admin/updateTicketStatus/:id").post(isAuth, updateTicketStatusAdmin);
 router.route("/admin/getTicketStats").get(isAuth, getTicketStats);
 router.route("/admin/addTicketReply/:id").post(isAuth, addTicketReply);
+
+// Admin referral routes
+router.route("/admin/getReferredUsers").get(isAuth, getReferredUsers);
+router.route("/admin/getReferralStats").get(isAuth, getReferralStats);
 
 module.exports = router;
 

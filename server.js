@@ -149,6 +149,77 @@ const CLIENT_ID = process.env.TCLIENT_ID;
 const CLIENT_SECRET = process.env.TCLIENT_SECRET;
 const API_VERSION = "2025-01-01";
 
+BVC_AUTH_URL="https://bvcmars.com/RestService/OrderUploadService.svc/GenerateAuthenticationToken"
+BVC_ORDER_UPLOAD_URL="https://bvcmars.com/RestService/OrderUploadService.svc/PushOrderUpload"
+BVC_REVERSE_UPLOAD_URL="https://bvcmars.com/RestService/OrderUploadService.svc/PushReverseOrder"
+BVC_TRACK_URL="https://bvcmars.com/RestService/TrackingService.svc/GetDocketTrackingDetails"
+BVC_CANCEL_URL="http://bvc.cloudapp.net/RestService/DocketCancelService.svc/PushDocketCancel"
+
+// CUSTOMER_AUTH_TOKEN="7DxYpMa0LhYvwp0tyo+9iQ=="
+CUSTOMER_AUTH_TOKEN="oOwCZ4oD/y8OFyG4H1y6AoQ7UxGFJwZLCaKvAk5a5MdxT0YlUaIFUTfC4pS/XQXU43HCRXZIr7bWNNuC/PKbAHrd7wQCEXYs2ZI+Sr1Fvunxa7U6NnnJzaHYPdmHHjpv"
+CUSTOMER_PUBLIC_KEY="174EE6D5-B9FB-482B-AA1B-1378673661A2"
+
+
+async function generateAuthToken() {
+try {
+    const payload = {
+    CustomerAuthToken: CUSTOMER_AUTH_TOKEN,
+    CustomerPublicKey: CUSTOMER_PUBLIC_KEY
+  };
+  const { data } = await axios.post(BVC_AUTH_URL, payload, {
+    headers: { 'Content-Type': 'application/json' }
+  });
+console.log("token",data?.XXAuthenticationToken)
+
+  return {
+    token: data?.XXAuthenticationToken,
+    // token: "oOwCZ4oD/y8OFyG4H1y6AoQ7UxGFJwZLCaKvAk5a5MdxT0YlUaIFUTfC4pS/XQXU43HCRXZIr7bWNNuC/PKbAHrd7wQCEXYs2ZI+Sr1Fvunxa7U6NnnJzaHYPdmHHjpv",
+    timeStamp: data?.TimeStamp
+  };
+} catch (error) {
+    console.log("err data0",error);
+
+}
+}
+
+async function uploadOrder(order) {
+try {
+    const { token, timeStamp } = await generateAuthToken();
+
+  const payload = {
+    CustomerId: order.customerId,
+    OrderUploadData: [order]
+  };
+console.log("BVC_ORDER_UPLOAD_URL",BVC_ORDER_UPLOAD_URL);
+console.log("BVC_ORDER_timeStamp",timeStamp);
+console.log("BVC_ORDER_token ",token);
+  const { data } = await axios.post(BVC_ORDER_UPLOAD_URL, payload, {
+    headers: {
+      'XX-Authentication-Token': token,
+      'TimeStamp': timeStamp,
+      // 'TimeStamp': "202510131455560291",
+      'Content-Type': 'application/json'
+    }
+  });
+
+  return data;
+} catch (error) {
+  console.log("err data1",error);
+  
+}
+}
+
+app.post('/order/upload', async (req, res) => {
+  try {
+    const response = await uploadOrder(req.body);
+    res.json(response);
+  } catch (err) {
+
+  console.log("err data2",err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // app.post("/create-subscription", async (req, res) => {
 //   try {
 //     // you can accept customer details & plan from req.body
@@ -384,7 +455,126 @@ app.use("/api/v0/chat", require("./routers/chatRouter"));
 app.use("/api/v0/notifications", require("./routers/notificationRouter"));
 app.use("/api/v0/maintenance", require("./routers/maintenanceRouter"));
 app.use("/api/v0/invoices", require("./routers/invoiceRouter"));
+app.use("/api/v0/investment-invoices", require("./routers/investmentInvoiceRouter"));
 app.use("/api/v0/banners", require("./routers/bannerRouter"));
+app.use("/api/v0/shipments", require("./routers/shipmentRouter"));
+
+// Debug endpoint for investment invoices
+app.get("/debug-invoice/:orderId", async (req, res) => {
+  try {
+    const InvestmentInvoice = require("./models/investmentInvoice_model");
+    const invoice = await InvestmentInvoice.findOne({ orderId: req.params.orderId });
+    
+    if (invoice) {
+      res.json({
+        found: true,
+        invoice: {
+          invoiceNumber: invoice.invoiceNumber,
+          orderId: invoice.orderId,
+          customerName: invoice.customerName,
+          orderType: invoice.orderType,
+          transactionType: invoice.transactionType,
+          totalInvoiceValue: invoice.totalInvoiceValue,
+          createdAt: invoice.createdAt
+        }
+      });
+    } else {
+      // Check if order exists in transactions
+      const Transaction = require("./models/transcationModel");
+      const transaction = await Transaction.findOne({ orderId: req.params.orderId });
+      
+      res.json({
+        found: false,
+        orderId: req.params.orderId,
+        transactionExists: !!transaction,
+        transactionData: transaction ? {
+          orderType: transaction.orderType,
+          transactionType: transaction.transactionType,
+          goldQty: transaction.goldQtyInGm,
+          inrAmount: transaction.inramount,
+          gstAmount: transaction.gst_value,
+        } : null
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Manual invoice creation for existing order
+app.post("/create-invoice-for-order/:orderId", async (req, res) => {
+  try {
+    const InvestmentInvoice = require("./models/investmentInvoice_model");
+    const Transaction = require("./models/transcationModel");
+    const User = require("./models/userModel");
+    
+    const orderId = req.params.orderId;
+    
+    // Check if invoice already exists
+    const existingInvoice = await InvestmentInvoice.findOne({ orderId });
+    if (existingInvoice) {
+      return res.json({
+        success: true,
+        message: "Invoice already exists",
+        invoiceNumber: existingInvoice.invoiceNumber
+      });
+    }
+    
+    // Get transaction details
+    const transaction = await Transaction.findOne({ orderId });
+    if (!transaction) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
+    }
+    
+    // Get user details
+    const user = await User.findById(transaction.userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+    
+    // Create invoice
+    const invoice = await InvestmentInvoice.create({
+      orderId: transaction.orderId,
+      userId: transaction.userId,
+      customerName: user.name || 'Customer',
+      customerEmail: user.email,
+      customerPhone: user.phone,
+      orderType: transaction.orderType,
+      transactionType: transaction.transactionType.toUpperCase(),
+      product: transaction.transactionType.toUpperCase() === 'GOLD' ? 'GOLD24' : 'SILVER',
+      quantity: parseFloat(transaction.goldQtyInGm),
+      ratePerGram: parseFloat(transaction.goldCurrentPrice),
+      amount: transaction.orderType === 'buy' 
+        ? parseFloat(transaction.inramount) - parseFloat(transaction.gst_value)
+        : parseFloat(transaction.inramount),
+      gstRate: transaction.orderType === 'buy' ? 3 : 0,
+      gstAmount: transaction.orderType === 'buy' ? parseFloat(transaction.gst_value) : 0,
+      totalInvoiceValue: parseFloat(transaction.inramount),
+      paymentMethod: transaction.Payment_method,
+      transactionId: transaction.orderId,
+      status: 'issued',
+    });
+    
+    res.json({
+      success: true,
+      message: "Invoice created successfully",
+      invoiceNumber: invoice.invoiceNumber,
+      orderId: invoice.orderId
+    });
+  } catch (error) {
+    console.error("Error creating invoice:", error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
+  }
+});
 
 // Debug banner routes
 app.get("/debug-banner-routes", (req, res) => {
@@ -711,32 +901,115 @@ const html = `
 // Socket.IO setup
 const jwt = require('jsonwebtoken');
 const User = require('./models/userModel');
+const Admin = require('./models/adminModel');
 const Chat = require('./models/chatModel');
 
 // Store online users
 const onlineUsers = new Map();
 
+// Helper function to check if a role is an admin role
+const isAdminRole = (role) => {
+  if (!role) return false;
+  const adminRoles = ['admin', 'super-admin', 'super_admin', 'moderator', 'support'];
+  return adminRoles.includes(role);
+};
+
 // Socket.IO authentication middleware
 io.use(async (socket, next) => {
   try {
-    const token = socket.handshake.auth.token;
+    // Try to get token from auth object first, then from query, then from headers
+    let token = socket.handshake.auth?.token;
+    
     if (!token) {
-      return next(new Error('Authentication error'));
+      // Try query parameter
+      token = socket.handshake.query?.token;
+    }
+    
+    if (!token) {
+      // Try Authorization header
+      const authHeader = socket.handshake.headers?.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.split(' ')[1];
+      }
+    }
+
+    if (!token) {
+      console.log('Socket auth: No token found');
+      return next(new Error('Authentication error: No token provided'));
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select('-password');
     
-    if (!user) {
-      return next(new Error('User not found'));
-    }
+    // Check if this is an admin token (has issuer and audience)
+    const isAdminToken = decoded.iss === 'precious-jewels-admin' && decoded.aud === 'precious-jewels-admin-panel';
+    
+    let userId;
+    let user, admin;
+    
+    if (isAdminToken) {
+      // Admin token structure: { id: ..., email: ..., role: ..., ... }
+      userId = decoded.id;
+      admin = await Admin.findById(userId).select('-password -twoFactorSecret');
+      
+      if (!admin) {
+        console.log('Socket auth: Admin not found for ID:', userId);
+        return next(new Error('Admin not found'));
+      }
+      
+      if (!admin.isActive) {
+        console.log('Socket auth: Admin account is inactive');
+        return next(new Error('Admin account is inactive'));
+      }
+      
+      socket.userId = admin._id.toString();
+      // Store the actual role from the admin model
+      socket.userRole = admin.role || 'admin';
+      socket.userName = admin.name || admin.email || 'Admin';
+      
+      console.log('Socket auth: Admin authenticated', {
+        userId: socket.userId,
+        role: socket.userRole,
+        name: socket.userName
+      });
+    } else {
+      // User token structure: { user: { id: ..., name: ... } } or { id: ... }
+      if (decoded.user && decoded.user.id) {
+        userId = decoded.user.id;
+      } else if (decoded.id) {
+        userId = decoded.id;
+      } else {
+        console.log('Socket auth: Invalid token structure', decoded);
+        return next(new Error('Authentication error: Invalid token structure'));
+      }
 
-    socket.userId = user._id.toString();
-    socket.userRole = user.role;
-    socket.userName = user.name;
+      user = await User.findById(userId).select('-password');
+      
+      if (!user) {
+        console.log('Socket auth: User not found for ID:', userId);
+        return next(new Error('User not found'));
+      }
+
+      socket.userId = user._id.toString();
+      socket.userRole = user.role || 'user';
+      socket.userName = user.name || 'Unknown';
+      
+      console.log('Socket auth: User authenticated', {
+        userId: socket.userId,
+        role: socket.userRole,
+        name: socket.userName
+      });
+    }
+    
     next();
   } catch (error) {
-    next(new Error('Authentication error'));
+    console.error('Socket auth error:', error.message);
+    if (error.name === 'JsonWebTokenError') {
+      return next(new Error('Authentication error: Invalid token'));
+    } else if (error.name === 'TokenExpiredError') {
+      return next(new Error('Authentication error: Token expired'));
+    } else {
+      return next(new Error('Authentication error: ' + error.message));
+    }
   }
 });
 
@@ -756,8 +1029,8 @@ io.on('connection', (socket) => {
   // Join user to their personal room
   socket.join(`user_${socket.userId}`);
 
-  // If admin, join admin room
-  if (socket.userRole === 'admin') {
+  // If admin (any admin role), join admin room
+  if (isAdminRole(socket.userRole)) {
     socket.join('admin_room');
   }
 
@@ -860,6 +1133,246 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ========== TICKET SOCKET EVENTS ==========
+  
+  // Handle joining ticket room
+  socket.on('join_ticket', async (ticketId) => {
+    try {
+      const Ticket = require('./models/ticket_model');
+      // Handle both string and object ticketId
+      const id = typeof ticketId === 'string' ? ticketId : (ticketId?.ticketId || ticketId);
+      const ticket = await Ticket.findById(id);
+      
+      if (!ticket) {
+        socket.emit('error', { message: 'Ticket not found' });
+        return;
+      }
+
+      // Check if user has access (user who created or admin)
+      const isOwner = ticket.user.toString() === socket.userId;
+      const isAdmin = isAdminRole(socket.userRole);
+
+      if (!isOwner && !isAdmin) {
+        socket.emit('error', { message: 'Access denied' });
+        return;
+      }
+
+      socket.join(`ticket_${ticketId}`);
+      socket.emit('joined_ticket', { ticketId });
+      
+      // Send current ticket data - convert to plain object
+      await ticket.populate('user', 'name email phone');
+      await ticket.populate('replies.repliedBy', 'name email');
+      
+      // Convert Mongoose document to plain object
+      const ticketObj = ticket.toObject();
+      // Ensure user is a string ID for Flutter compatibility
+      if (ticketObj.user && typeof ticketObj.user === 'object') {
+        ticketObj.user = ticketObj.user._id ? ticketObj.user._id.toString() : ticketObj.user.toString();
+      }
+      // Ensure repliedBy is a string ID for each reply
+      if (ticketObj.replies) {
+        ticketObj.replies = ticketObj.replies.map(reply => ({
+          ...reply,
+          repliedBy: reply.repliedBy && typeof reply.repliedBy === 'object' 
+            ? (reply.repliedBy._id ? reply.repliedBy._id.toString() : reply.repliedBy.toString())
+            : reply.repliedBy?.toString() || reply.repliedBy,
+          timestamp: reply.timestamp ? new Date(reply.timestamp).toISOString() : new Date().toISOString(),
+          _id: reply._id ? reply._id.toString() : undefined
+        }));
+      }
+      // Ensure dates are ISO strings
+      if (ticketObj.createdAt) ticketObj.createdAt = new Date(ticketObj.createdAt).toISOString();
+      if (ticketObj.updatedAt) ticketObj.updatedAt = new Date(ticketObj.updatedAt).toISOString();
+      
+      socket.emit('ticket_data', { ticket: ticketObj });
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to join ticket' });
+    }
+  });
+
+  // Handle sending ticket message
+  socket.on('send_ticket_message', async (data) => {
+    try {
+      const { ticketId, message, isInternal = false } = data;
+      const Ticket = require('./models/ticket_model');
+      
+      const ticket = await Ticket.findById(ticketId);
+      if (!ticket) {
+        socket.emit('error', { message: 'Ticket not found' });
+        return;
+      }
+
+      // Check access
+      const isOwner = ticket.user.toString() === socket.userId;
+      const isAdmin = isAdminRole(socket.userRole);
+
+      if (!isOwner && !isAdmin) {
+        socket.emit('error', { message: 'Access denied' });
+        return;
+      }
+
+      // Add reply to ticket
+      const reply = {
+        message,
+        repliedBy: socket.userId,
+        isInternal: isInternal && isAdmin, // Only admins can send internal notes
+        timestamp: new Date()
+      };
+
+      if (!ticket.replies) ticket.replies = [];
+      ticket.replies.push(reply);
+      await ticket.save();
+
+      // Populate reply data
+      await ticket.populate('replies.repliedBy', 'name email');
+      await ticket.populate('user', 'name email phone');
+
+      const newReply = ticket.replies[ticket.replies.length - 1];
+      
+      // Convert reply to plain object with proper formatting
+      const replyObj = newReply.toObject ? newReply.toObject() : newReply;
+      replyObj._id = replyObj._id ? replyObj._id.toString() : undefined;
+      replyObj.repliedBy = replyObj.repliedBy && typeof replyObj.repliedBy === 'object'
+        ? (replyObj.repliedBy._id ? replyObj.repliedBy._id.toString() : replyObj.repliedBy.toString())
+        : replyObj.repliedBy?.toString() || replyObj.repliedBy;
+      replyObj.timestamp = replyObj.timestamp ? new Date(replyObj.timestamp).toISOString() : new Date().toISOString();
+
+      // Determine if sender is admin or user
+      const isAdminSender = isAdminRole(socket.userRole);
+      
+      // Emit to all users in the ticket room
+      io.to(`ticket_${ticketId}`).emit('new_ticket_message', {
+        ticketId,
+        reply: replyObj,
+        sender: {
+          id: socket.userId,
+          name: socket.userName,
+          role: socket.userRole,
+          isAdmin: isAdminSender,
+          isInternal: reply.isInternal
+        }
+      });
+
+      // Notify the other party if they're not in the room
+      const otherUserId = isOwner ? null : ticket.user.toString();
+      if (otherUserId) {
+        const otherUserSocket = Array.from(onlineUsers.values()).find(
+          user => user.userId === otherUserId
+        );
+        
+        if (otherUserSocket && !reply.isInternal) {
+          io.to(otherUserSocket.socketId).emit('ticket_notification', {
+            ticketId,
+            message: message,
+            sender: socket.userName,
+            subject: ticket.subject
+          });
+        }
+      }
+
+      // Notify admins if user sent a message
+      if (isOwner && !reply.isInternal) {
+        // Convert ticket to plain object for admin notification
+        const ticketObj = ticket.toObject();
+        if (ticketObj.user && typeof ticketObj.user === 'object') {
+          ticketObj.user = ticketObj.user._id ? ticketObj.user._id.toString() : ticketObj.user.toString();
+        }
+        io.to('admin_room').emit('new_ticket_reply', {
+          ticketId,
+          ticket: ticketObj,
+          reply: replyObj
+        });
+      }
+
+    } catch (error) {
+      console.error('Send ticket message error:', error);
+      socket.emit('error', { message: 'Failed to send message' });
+    }
+  });
+
+  // Handle ticket status update
+  socket.on('update_ticket_status', async (data) => {
+    try {
+      const { ticketId, status, adminNote } = data;
+      const Ticket = require('./models/ticket_model');
+      
+      // Only admins can update status
+      if (!isAdminRole(socket.userRole)) {
+        socket.emit('error', { message: 'Access denied' });
+        return;
+      }
+
+      const ticket = await Ticket.findById(ticketId);
+      if (!ticket) {
+        socket.emit('error', { message: 'Ticket not found' });
+        return;
+      }
+
+      ticket.status = status || ticket.status;
+      if (adminNote) ticket.adminNote = adminNote;
+      ticket.updatedBy = socket.userId;
+      await ticket.save();
+
+      await ticket.populate('user', 'name email phone');
+      await ticket.populate('replies.repliedBy', 'name email');
+
+      // Convert ticket to plain object with proper formatting
+      const ticketObj = ticket.toObject();
+      if (ticketObj.user && typeof ticketObj.user === 'object') {
+        ticketObj.user = ticketObj.user._id ? ticketObj.user._id.toString() : ticketObj.user.toString();
+      }
+      if (ticketObj.replies) {
+        ticketObj.replies = ticketObj.replies.map(reply => ({
+          ...reply,
+          repliedBy: reply.repliedBy && typeof reply.repliedBy === 'object' 
+            ? (reply.repliedBy._id ? reply.repliedBy._id.toString() : reply.repliedBy.toString())
+            : reply.repliedBy?.toString() || reply.repliedBy,
+          timestamp: reply.timestamp ? new Date(reply.timestamp).toISOString() : new Date().toISOString(),
+          _id: reply._id ? reply._id.toString() : undefined
+        }));
+      }
+      if (ticketObj.createdAt) ticketObj.createdAt = new Date(ticketObj.createdAt).toISOString();
+      if (ticketObj.updatedAt) ticketObj.updatedAt = new Date(ticketObj.updatedAt).toISOString();
+
+      // Emit status update to all users in ticket room
+      io.to(`ticket_${ticketId}`).emit('ticket_status_updated', {
+        ticketId,
+        ticket: ticketObj,
+        updatedBy: {
+          id: socket.userId,
+          name: socket.userName
+        }
+      });
+
+      // Notify ticket owner
+      const ownerSocket = Array.from(onlineUsers.values()).find(
+        user => user.userId === ticket.user.toString()
+      );
+      
+      if (ownerSocket) {
+        io.to(ownerSocket.socketId).emit('ticket_status_notification', {
+          ticketId,
+          status: ticket.status,
+          subject: ticket.subject
+        });
+      }
+
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to update ticket status' });
+    }
+  });
+
+  // Handle typing indicator for tickets
+  socket.on('ticket_typing', (data) => {
+    const { ticketId, isTyping } = data;
+    socket.to(`ticket_${ticketId}`).emit('user_typing_ticket', {
+      userId: socket.userId,
+      userName: socket.userName,
+      isTyping
+    });
+  });
+
   // Handle typing indicator
   socket.on('typing', (data) => {
     const { chatId, isTyping } = data;
@@ -925,9 +1438,456 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(process.env.PORT, () => {
-  console.log(`Server on ${process.env.PORT} `);
+
+
+
+const BASE_URL = "https://api-preprod.phonepe.com/apis/pg-sandbox";
+const CLIENT_VERSION = "1";
+// Get access token
+async function getAuthToken() {
+  try {
+    
+  const url = `https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token`;
+  const params = new URLSearchParams({
+    client_id: "TEST-M23HLKE4QF87Z_25102",
+    client_secret: "Y2E1NWFhOGQtZjQ1YS00MjNmLThiZDYtYjA1NjlhMWUwOTVl",
+    grant_type: "client_credentials",
+    client_version: CLIENT_VERSION,
+  });
+  const res = await axios.post(url, params, {
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  });
+  console.log('resrseres',res.data)
+  return res.data.access_token;
+  } catch (error) {
+    console.log('getoken',error);
+  }
+}
+
+// Create Subscription
+// app.post("/autopay/create", async (req, res) => {
+//   try {
+//     const { amount } = req.body;
+//     const token = await getAuthToken();
+
+//     console.log("token",token);
+
+//     const payload = {
+//       merchantOrderId: "ORDER-" + Date.now(),
+//       amount,
+//       expireAt: Date.now() + 10 * 60 * 1000,
+//       paymentFlow: {
+//         type: "SUBSCRIPTION_SETUP",
+//         merchantSubscriptionId: "SUB-" + Date.now(),
+//         authWorkflowType: "TRANSACTION",
+//         amountType: "FIXED",
+//         maxAmount: amount,
+//         frequency: "ON_DEMAND",
+//         paymentMode: {
+//           type: "UPI_INTENT",
+//           targetApp: "com.precious.goldsmith",
+//         },
+//       },
+//       deviceContext: { deviceOS: "ANDROID" },
+//     };
+
+//     const resp = await axios.post(`${BASE_URL}/subscriptions/v2/setup`, payload, {
+//       headers: {
+//         Authorization: `O-Bearer ${token}`,
+//         "Content-Type": "application/json",
+//       },
+//     });
+
+//     res.json(resp.data);
+//   } catch (err) {
+//     res.status(500).json({
+//       error: err.response?.data || err.message,
+//     });
+//   }
+// });
+
+ 
+// app.post("/autopay/setup", async (req, res) => {
+//   try {
+//     // Replace these values with dynamic ones if needed
+//     const merchantOrderId = `MO${Date.now()}`;
+//     const merchantSubscriptionId = `MS${Date.now()}`;
+//     const amount = 200; // in paise
+//     const expireAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours later
+
+//     const requestBody = {
+//       merchantOrderId,
+//       amount,
+//       expireAt,
+//       paymentFlow: {
+//         type: "SUBSCRIPTION_SETUP",
+//         merchantSubscriptionId,
+//         authWorkflowType: "TRANSACTION",
+//         amountType: "FIXED",
+//         maxAmount: amount,
+//         frequency: "ON_DEMAND",
+//         expireAt: Date.now() + 365 * 24 * 60 * 60 * 1000, // 1 year
+//         paymentMode: {
+//           type: "UPI_INTENT",
+//           targetApp: "com.phonepe.app",
+//         },
+//       },
+//       deviceContext: {
+//         deviceOS: "ANDROID",
+//       },
+//     };
+//     const token = await getAuthToken();
+// console.log("token",token);
+//     // Authorization token (from PhonePe)
+//     // const token =
+//     //   "O-Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHBpcmVzT24iOjE3MTIyNTM2MjU2NDQsIm1lcmNoYW50SWQiOiJWMlNVQlVBVCJ9.7aVzYI_f_77-bBicEcRNuYx093b2wCsgl_WFNkKqAPY";
+
+//     const response = await axios.post(
+//       "https://api-preprod.phonepe.com/apis/pg-sandbox/subscriptions/v2/setup",
+//       requestBody,
+//       {
+//         headers: {
+//           Accept: "application/json",
+//           Authorization: token,
+//           "Content-Type": "application/json",
+//         },
+//       }
+//     );
+
+//     console.log("PhonePe Response:", response.data);
+//     return res.status(200).json(response.data);
+//   } catch (error) {
+//     console.error("PhonePe Subscription Error:", error.response?.data || error.message);
+//     return res.status(500).json({ error: error.response?.data || error.message });
+//   }
+// });
+
+
+// 📍 Subscription setup API
+app.post("/autopay/setup", async (req, res) => {
+  try {
+    // const {
+    //   merchantOrderId,
+    //   amount,
+    //   vpa,
+    //   maxAmount,
+    //   merchantSubscriptionId,
+    // } = req.body;
+
+    // Prepare payload
+    const payload = {
+      merchantOrderId: `MO${Date.now()}`,
+      amount:  200,
+      expireAt: Date.now() + 1000 * 60 * 60, // 1 hour from now
+      metaInfo: {
+        udf1: "some meta info 1",
+        udf2: "some meta info 2",
+        udf3: "some meta info 3",
+        udf4: "some meta info 4",
+        udf5: "some meta info 5",
+      },
+      paymentFlow: {
+        type: "SUBSCRIPTION_SETUP",
+        merchantSubscriptionId: `MS${Date.now()}`,
+        authWorkflowType: "TRANSACTION",
+        amountType: "VARIABLE",
+        maxAmount: 2000,
+        frequency: "ON_DEMAND",
+        expireAt: Date.now() + 1000 * 60 * 60 * 24 * 30, // 30 days
+        paymentMode: {
+          type: "UPI_COLLECT",
+          details: {
+            type: "VPA",
+            vpa: "7092053592@ybl",
+          },
+        },
+      },
+    };
+    const token = await getAuthToken();
+        console.log(" token response:", token);
+
+    // Axios config
+ 
+    const body=
+//       {
+//     "merchantOrderId": "MO1709025691805",
+//     "amount": 200,
+//     "expireAt": 1709058548000,
+//     "metaInfo": {
+//         "udf1": "some meta info of max length 256",
+//         "udf2": "some meta info of max length 256",
+//         "udf3": "some meta info of max length 256",
+//         "udf4": "some meta info of max length 256",
+//         "udf5": "some meta info of max length 256"
+//     },
+//     "paymentFlow": {
+//         "type": "SUBSCRIPTION_SETUP",
+//         "merchantSubscriptionId": "MS1709025691805",
+//         "authWorkflowType": "TRANSACTION",
+//         "amountType": "VARIABLE",
+//         "maxAmount": 2000,
+//         "frequency": "ON_DEMAND",
+//         "expireAt": 1737278524000,
+//         "paymentMode": {
+//             "type": "UPI_COLLECT",
+//             "details": {
+//                 "type": "VPA",
+//                 "vpa": "999@ybl"
+//             }
+//         }
+//     }
+// }
+
+{
+    "merchantOrderId": "MO1709025658932",
+    "amount": 200,
+    "expireAt": 1709058548000,
+    "metaInfo": {
+        "udf1": "some meta info of max length 256",
+        "udf2": "some meta info of max length 256",
+        "udf3": "some meta info of max length 256",
+        "udf4": "some meta info of max length 256",
+        "udf5": "some meta info of max length 256"
+    },
+    "paymentFlow": {
+        "type": "SUBSCRIPTION_SETUP",
+        "merchantSubscriptionId": "MS1709025658932",
+        "authWorkflowType": "TRANSACTION",
+        "amountType": "FIXED",
+        "maxAmount": 200,
+        "frequency": "ON_DEMAND",
+        "expireAt": 1737278524000,
+        "paymentMode": {
+            "type": "UPI_INTENT",
+            "targetApp": "com.phonepe.app"
+        }
+    },
+    "deviceContext": {
+        "deviceOS": "ANDROID"
+    }
+}
+    
+
+    // const resp = await axios.post("https://api-preprod.phonepe.com/apis/pg-sandbox/subscriptions/v2/setup", payload, {
+    //   headers: {
+    //     Authorization: `O-Bearer ${token}`,
+    //     "Content-Type": "application/json",
+    //   },
+    // });
+
+
+   const config = {
+      method: "post",
+      url: "https://api-preprod.phonepe.com/apis/pg-sandbox/subscriptions/v2/setup",
+      // url: "https://api-preprod.phonepe.com/apis/pg-sandbox/v2/validate/upi",
+      headers: {
+        "Content-Type": "application/json",
+      Authorization: `O-Bearer ${token}`,
+      },
+      data: JSON.stringify(body),
+      maxBodyLength: Infinity,
+    };
+    
+        const response = await axios.request(config);
+
+    // // Send request to PhonePe
+    // const response = await axios.request(config);
+    console.log("✅ PhonePe response:", response.data);
+
+    // Send back to Flutter app
+    res.status(200).json({
+      success: true,
+      data: response.data,
+    });
+  } catch (error) {
+    console.error("❌ PhonePe subscription setup failed:", error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
 });
 
 
-// 23/10/2025 5:00 PM
+
+
+
+
+// Check subscription status
+app.get("/autopay/status/:orderId", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const token = await getAuthToken();
+    const resp = await axios.get(`${BASE_URL}/subscriptions/v2/order/${orderId}/status`, {
+      headers: { Authorization: `O-Bearer ${token}` },
+    });
+    res.json(resp.data);
+  } catch (err) {
+    res.status(500).json({
+      error: err.response?.data || err.message,
+    });
+  }
+});
+
+// Execute AutoPay charge
+app.post("/autopay/execute", async (req, res) => {
+  try {
+    const { subscriptionId, amount } = req.body;
+    const token = await getAuthToken();
+
+    const payload = {
+      merchantOrderId: "ORDER-" + Date.now(),
+      amount,
+      merchantSubscriptionId: subscriptionId,
+    };
+
+    const resp = await axios.post(`${BASE_URL}/subscriptions/v2/execute`, payload, {
+      headers: {
+        Authorization: `O-Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    res.json(resp.data);
+  } catch (err) {
+    res.status(500).json({
+      error: err.response?.data || err.message,
+    });
+  }
+});
+
+// Revoke/Cancel subscription
+app.post("/autopay/revoke", async (req, res) => {
+  try {
+    const { subscriptionId } = req.body;
+    const token = await getAuthToken();
+
+    const payload = {
+      merchantSubscriptionId: subscriptionId,
+    };
+
+    const resp = await axios.post(`${BASE_URL}/subscriptions/v2/revoke`, payload, {
+      headers: {
+        Authorization: `O-Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    res.json(resp.data);
+  } catch (err) {
+    res.status(500).json({
+      error: err.response?.data || err.message,
+    });
+  }
+});
+
+
+
+const CONFIG = {
+  baseUrl: 'https://api-preprod.phonepe.com/apis/pg-sandbox',
+  clientId: 'TEST-M23HLKE4QF87Z_25102',
+  clientSecret: 'Y2E1NWFhOGQtZjQ1YS00MjNmLThiZDYtYjA1NjlhMWUwOTVl',
+  merchantId: 'M23HLKE4QF87Z',
+};
+
+// Get Auth Token
+app.post('/api/phonepe/auth-token', async (req, res) => {
+  try {
+    const response = await axios.post(
+      `${CONFIG.baseUrl}/v1/oauth/token`,
+      {
+        client_id: CONFIG.clientId,
+        client_secret: CONFIG.clientSecret,
+        grant_type: 'client_credentials',
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+    
+    res.json(response.data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create Order
+app.post('/api/phonepe/create-order', async (req, res) => {
+  try {
+    const { amount, merchantOrderId, userId } = req.body;
+    
+    // First get auth token
+    const tokenResponse = await axios.post(
+      `${CONFIG.baseUrl}/v1/oauth/token`,
+      {
+        client_id: CONFIG.clientId,
+        client_secret: CONFIG.clientSecret,
+        grant_type: 'client_credentials',
+      }
+    );
+    
+    const accessToken = tokenResponse.data.access_token;
+    
+    // Create order
+    const orderResponse = await axios.post(
+      `${CONFIG.baseUrl}/checkout/v2/sdk/order`,
+      {
+        amount: amount,
+        currency: 'INR',
+        merchantOrderId: merchantOrderId,
+        merchantUserId: userId,
+        redirectUrl: 'https://yourwebsite.com/callback',
+        redirectMode: 'POST',
+        callbackUrl: 'https://yourwebsite.com/webhook',
+      },
+      {
+        headers: {
+          Authorization: `O-Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    
+    res.json(orderResponse.data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Check Status
+app.get('/api/phonepe/check-status/:orderId', async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    
+    // Get auth token first
+    const tokenResponse = await axios.post(
+      `${CONFIG.baseUrl}/v1/oauth/token`,
+      {
+        client_id: CONFIG.clientId,
+        client_secret: CONFIG.clientSecret,
+        grant_type: 'client_credentials',
+      }
+    );
+    
+    const accessToken = tokenResponse.data.access_token;
+    
+    // Check status
+    const statusResponse = await axios.get(
+      `${CONFIG.baseUrl}/checkout/v2/sdk/order/${orderId}`,
+      {
+        headers: {
+          Authorization: `O-Bearer ${accessToken}`,
+        },
+      }
+    );
+    
+    res.json(statusResponse.data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+server.listen(process.env.PORT, () => {
+  console.log(`Server on ${process.env.PORT} `);
+});

@@ -10,6 +10,7 @@ const {
   deleteInvoice,
   getInvoiceStats,
   downloadInvoice,
+  downloadInvoiceByOrderCode,
   updateInvoiceProductData,
   createTestInvoice,
   debugProductData
@@ -45,6 +46,11 @@ router.get('/stats',  getInvoiceStats);
 // @route   PUT /api/v0/invoices/:id/update-product-data
 // @access  Private (Admin)
 router.put('/:id/update-product-data',  updateInvoiceProductData);
+
+// @desc    Download invoice as PDF by order code
+// @route   GET /api/v0/invoices/order/:orderCode/download
+// @access  Private
+router.get('/order/:orderCode/download',  downloadInvoiceByOrderCode);
 
 // @desc    Download invoice as PDF
 // @route   GET /api/v0/invoices/:id/download

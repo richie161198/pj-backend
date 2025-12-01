@@ -2,6 +2,12 @@ const axios = require("axios");
 const orderModel = require("../models/orderModel");
 const productOrder = require("../models/commerce_order_model");
 const transactionSchema = require("../models/transcationModel");
+const InvestmentInvoice = require("../models/investmentInvoice_model");
+
+const Shipment = require('../models/shipment_model');
+const User = require('../models/userModel');
+const Product = require('../models/product_model');
+const bmcService = require('../services/bmcService');
 const { Cashfree, CFEnvironment } = require("cashfree-pg");
 var cashfree = new Cashfree(
   CFEnvironment.PRODUCTION,
@@ -106,6 +112,41 @@ const buyOrSellGold = async (req, res) => {
         status: "created",
       });
 
+      // Create invoice for this order
+      try {
+        console.log(`🔄 Attempting to create invoice for order: ${orderId}`);
+        console.log(`User details - Name: ${user.name}, Email: ${user.email}, Phone: ${user.phone}`);
+
+        const invoiceData = {
+          orderId,
+          userId,
+          customerName: user.name || 'Customer',
+          customerEmail: user.email || 'noemail@example.com',
+          customerPhone: user.phone || '0000000000',
+          orderType: 'buy',
+          transactionType: transactionType.toUpperCase(),
+          product: transactionType.toUpperCase() === 'GOLD' ? 'GOLD24' : 'SILVER',
+          quantity: parseFloat(goldQty),
+          ratePerGram: parseFloat(goldPrice),
+          amount: parseFloat(inrAmount) - parseFloat(gstAmount),
+          gstRate: 3,
+          gstAmount: parseFloat(gstAmount),
+          totalInvoiceValue: parseFloat(inrAmount),
+          paymentMethod: Payment_method,
+          transactionId: orderId,
+          status: 'issued',
+        };
+
+        console.log('Invoice data:', JSON.stringify(invoiceData, null, 2));
+
+        const invoice = await InvestmentInvoice.create(invoiceData);
+        console.log(`✅ Invoice created successfully: ${invoice.invoiceNumber} for order: ${orderId}`);
+      } catch (invoiceError) {
+        console.error(`❌ Error creating invoice for order ${orderId}:`, invoiceError.message);
+        console.error('Full error:', invoiceError);
+        // Don't fail the order if invoice creation fails
+      }
+
       return res.status(201).json({
         status: true,
         message: `Bought ${goldQty}g gold for ₹${inrAmount} (₹${gstAmount} GST applied)`,
@@ -142,6 +183,41 @@ const buyOrSellGold = async (req, res) => {
         inramount: receivedAmount,
         status: "created",
       });
+
+      // Create invoice for this order
+      try {
+        console.log(`🔄 Attempting to create invoice for SELL order: ${orderId}`);
+        console.log(`User details - Name: ${user.name}, Email: ${user.email}, Phone: ${user.phone}`);
+
+        const invoiceData = {
+          orderId,
+          userId,
+          customerName: user.name || 'Customer',
+          customerEmail: user.email || 'noemail@example.com',
+          customerPhone: user.phone || '0000000000',
+          orderType: 'sell',
+          transactionType: transactionType.toUpperCase(),
+          product: transactionType.toUpperCase() === 'GOLD' ? 'GOLD24' : 'SILVER',
+          quantity: parseFloat(goldQty),
+          ratePerGram: parseFloat(goldPrice),
+          amount: receivedAmount,
+          gstRate: 0,
+          gstAmount: 0,
+          totalInvoiceValue: receivedAmount,
+          paymentMethod: Payment_method,
+          transactionId: orderId,
+          status: 'issued',
+        };
+
+        console.log('Invoice data:', JSON.stringify(invoiceData, null, 2));
+
+        const invoice = await InvestmentInvoice.create(invoiceData);
+        console.log(`✅ Invoice created successfully: ${invoice.invoiceNumber} for SELL order: ${orderId}`);
+      } catch (invoiceError) {
+        console.error(`❌ Error creating invoice for SELL order ${orderId}:`, invoiceError.message);
+        console.error('Full error:', invoiceError);
+        // Don't fail the order if invoice creation fails
+      }
 
       return res.status(201).json({
         status: true,
@@ -235,53 +311,13 @@ const getParticularOrderHistory = async (req, res) => {
   }
 };
 
-const createOrder = async (req, res) => {
-  console.log("sddsds", req.body);
-  const { order_amount } = req.body;
-  const orderId = `ORD-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-
-  try {
-    var request = {
-      order_amount: order_amount,
-      order_currency: "INR",
-      order_id: orderId,
-      customer_details: {
-        customer_id: "walterwNdrcMi",
-        customer_phone: "9999999999",
-      },
-      order_meta: {
-        return_url:
-          "https://www.cashfree.com/devstudio/preview/pg/web/checkout?order_id={order_id}",
-      },
-    };
-    cashfree
-      .PGCreateOrder(request)
-      .then((response) => {
-        console.log("Order Created successfully:", response.data);
-        res.status(200).json({ message: response.data });
-      })
-      .catch((error) => {
-        console.error("Error:", error.response.data.message);
-        res.status(400).json({ message: response.data.message });
-      });
-  } catch (err) {
-    console.error(err.response?.data || err);
-    res
-      .status(500)
-      .json({
-        error: "Create order failed",
-        details: err.response?.data || err.message,
-      });
-  }
-};
-
 
 
 
 // Place Order
 const placeOrder = async (req, res) => {
   try {
-    const { items, totalAmount ,deliveryAddress} = req.body;
+    const { items, totalAmount, deliveryAddress } = req.body;
 
     console.log(req.body, req.user.id);
     const orderId = `PGCOM-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
@@ -295,6 +331,151 @@ const placeOrder = async (req, res) => {
     });
 
     await order.save();
+
+    // Automatically create shipment with BMC integration
+    try {
+
+      const customer = await User.findById(req.user.id);
+      if (customer) {
+        console.log('🚀 Starting BMC shipment creation for order:', order.orderCode);
+
+        // Prepare items with product names
+        const orderItems = await Promise.all(items.map(async (item) => {
+          const product = await Product.findById(item.productDataid);
+          return {
+            name: product ? product.name : 'Product',
+            quantity: item.quantity,
+            price: item.price,
+          };
+        }));
+
+        // Parse delivery address
+        let addressData = {
+          addressLine1: deliveryAddress || "N/A",
+          addressLine2: "",
+          city: "Chennai",
+          state: "Tamil Nadu",
+          pincode: "600091",
+        };
+
+        // Try to parse if deliveryAddress is JSON string or structured
+        if (deliveryAddress && typeof deliveryAddress === 'object') {
+          addressData = {
+            addressLine1: deliveryAddress.street || deliveryAddress.addressLine1 || deliveryAddress.address || "N/A",
+            addressLine2: deliveryAddress.addressLine2 || "",
+            city: deliveryAddress.city || "N/A",
+            state: deliveryAddress.state || "N/A",
+            pincode: deliveryAddress.pincode || deliveryAddress.zipcode || "600091",
+          };
+        } else if (deliveryAddress && typeof deliveryAddress === 'string') {
+          try {
+            const parsed = JSON.parse(deliveryAddress);
+            addressData = {
+              addressLine1: parsed.street || parsed.addressLine1 || parsed.address || deliveryAddress,
+              addressLine2: parsed.addressLine2 || "",
+              city: parsed.city || "N/A",
+              state: parsed.state || "N/A",
+              pincode: parsed.pincode || parsed.zipcode || "000000",
+            };
+          } catch (e) {
+            // If not JSON, use as is
+            addressData.addressLine1 = deliveryAddress;
+          }
+        }
+
+        // Calculate total weight (estimate based on items)
+        const estimatedWeight = orderItems.length * 0.5; // 0.5 kg per item average
+
+        // Check if COD order
+        const isCOD = items.some(item => item.paymentMode === 'COD') || false;
+        const codAmount = isCOD ? totalAmount : 0;
+
+        // Create BMC shipment
+        let bmcResponse = null;
+        let trackingNumber = null;
+        let courierService = "Blue Mountain Courier";
+
+        try {
+          bmcResponse = await bmcService.createShipment({
+            orderId: order._id.toString(),
+            orderCode: order.orderCode,
+            customerName: customer.name || "Customer",
+            customerPhone: customer.phone || "0000000000",
+            customerEmail: customer.email || "",
+            deliveryAddress: addressData,
+            items: orderItems,
+            totalAmount: totalAmount,
+            codAmount: codAmount,
+            weight: estimatedWeight,
+            packageCount: orderItems.length,
+          });
+
+          if (bmcResponse.success) {
+            trackingNumber = bmcResponse.awbNumber || bmcResponse.trackingNumber;
+            console.log('✅ BMC Shipment Created - AWB:', trackingNumber);
+          } else {
+            console.log('⚠️ BMC API returned non-success:', bmcResponse);
+            // Fall back to manual tracking number
+            trackingNumber = `TRK-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+          }
+        } catch (bmcError) {
+          console.error('❌ BMC Shipment Creation Failed:', bmcError.message);
+          // Fall back to manual tracking number
+          trackingNumber = `TRK-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+          courierService = "Delhivery"; // Fallback courier
+        }
+
+        // Calculate estimated delivery date (5-7 days from now)
+        const estimatedDeliveryDate = new Date();
+        estimatedDeliveryDate.setDate(estimatedDeliveryDate.getDate() + 6);
+
+        // Create shipment record in database
+        const shipment = new Shipment({
+          orderId: order._id,
+          orderCode: order.orderCode,
+          userId: req.user.id,
+          trackingNumber: trackingNumber,
+          courierService: courierService,
+          shippingAddress: {
+            recipientName: customer.name || "Customer",
+            phone: customer.phone || "N/A",
+            addressLine1: addressData.addressLine1,
+            addressLine2: addressData.addressLine2,
+            city: addressData.city,
+            state: addressData.state,
+            pincode: addressData.pincode,
+            country: "India",
+          },
+          status: "PENDING",
+          estimatedDeliveryDate: estimatedDeliveryDate,
+          weight: estimatedWeight,
+          packageCount: orderItems.length,
+          codAmount: codAmount,
+          isCOD: isCOD,
+          trackingHistory: [
+            {
+              status: "PENDING",
+              description: bmcResponse && bmcResponse.success
+                ? `Order placed successfully with ${courierService}. AWB: ${trackingNumber}`
+                : "Order placed successfully, shipment will be processed soon",
+              timestamp: new Date(),
+              updatedBy: "System",
+            },
+          ],
+        });
+
+        await shipment.save();
+        console.log('✅ Shipment record created in database:', shipment._id);
+
+        // Update order with shipment reference (optional)
+        order.shipmentId = shipment._id;
+        await order.save();
+      }
+    } catch (shipmentError) {
+      console.error('❌ Error in shipment creation flow:', shipmentError);
+      // Don't fail the order if shipment creation fails
+      // Order is still valid, shipment can be created manually later
+    }
 
     // Automatically create invoice for the order
     try {
@@ -328,12 +509,12 @@ const placeOrder = async (req, res) => {
           // Extract detailed product information
           const productDetails = product.productDetails || [];
           const priceDetails = product.priceDetails || [];
-          
+
           // Get weight from product details or price details
           let weight = 0;
           let purity = '22Karat';
           let metalType = 'gold';
-          
+
           // Extract weight and purity from product details
           productDetails.forEach(detail => {
             if (detail.type === 'Metal') {
@@ -352,12 +533,12 @@ const placeOrder = async (req, res) => {
           // Calculate pricing details from priceDetails or use defaults
           const unitPrice = product.sellingprice || 0;
           const totalPrice = unitPrice * orderItem.quantity;
-          
+
           // Extract making charges, GST, and discount from priceDetails
           let makingCharges = 0;
           let gst = 0;
           let discount = 0;
-          
+
           priceDetails.forEach(price => {
             if (price.name === 'Making Charges') {
               makingCharges = (parseFloat(price.value) || 0) * orderItem.quantity;
@@ -473,7 +654,153 @@ const placeOrder = async (req, res) => {
   }
 };
 
-// Return Order
+// Return/Refund Request - Comprehensive API
+const createReturnRefundRequest = async (req, res) => {
+  try {
+    const { orderId, requestType, items, reason, additionalNotes } = req.body;
+    const userId = req.user.id;
+
+    // Validate input
+    if (!orderId || !requestType || !items || items.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: "Missing required fields: orderId, requestType, and items are required" 
+      });
+    }
+
+    if (!['return', 'refund'].includes(requestType.toLowerCase())) {
+      return res.status(400).json({ 
+        success: false, 
+        error: "requestType must be either 'return' or 'refund'" 
+      });
+    }
+
+    // Find the order and verify it belongs to the user
+    const order = await productOrder.findById(orderId).populate('items.productDataid');
+    if (!order) {
+      return res.status(404).json({ success: false, error: "Order not found" });
+    }
+
+    if (order.user.toString() !== userId.toString()) {
+      return res.status(403).json({ 
+        success: false, 
+        error: "You don't have permission to return/refund this order" 
+      });
+    }
+
+    // Check if order is eligible for return/refund (not already returned/refunded)
+    if (['RETURNED', 'REFUNDED'].includes(order.status)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Order is already ${order.status.toLowerCase()}` 
+      });
+    }
+
+    // Validate items
+    const ReturnRequest = require('../models/returnRequest');
+    const validItems = [];
+    let totalRefundAmount = 0;
+
+    for (const item of items) {
+      const orderItem = order.items.find((oi) => {
+        // Handle both populated and unpopulated productDataid
+        const productId = oi.productDataid._id 
+          ? oi.productDataid._id.toString() 
+          : oi.productDataid.toString();
+        return productId === item.productId;
+      });
+
+      if (!orderItem) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `Product ${item.productId} not found in order` 
+        });
+      }
+
+      if (item.qty > orderItem.quantity) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `Requested quantity (${item.qty}) exceeds ordered quantity (${orderItem.quantity}) for product ${item.productId}` 
+        });
+      }
+
+      // Get productId for ReturnRequest (use ObjectId)
+      const productIdForRequest = orderItem.productDataid._id 
+        ? orderItem.productDataid._id 
+        : orderItem.productDataid;
+
+      validItems.push({
+        productId: productIdForRequest,
+        qty: item.qty,
+        reason: item.reason || reason || 'Not specified'
+      });
+
+      // Calculate refund amount for this item
+      // orderItem.price is the total price for the item (quantity * unit price)
+      // So we need to calculate: (total_price / quantity) * return_quantity
+      let itemUnitPrice = 0;
+      if (orderItem.price && orderItem.quantity > 0) {
+        // Price is total for the item, so divide by quantity to get unit price
+        itemUnitPrice = orderItem.price / orderItem.quantity;
+      } else if (orderItem.productDataid?.sellingprice) {
+        // Fallback to product selling price if order item price is not available
+        itemUnitPrice = orderItem.productDataid.sellingprice;
+      }
+      
+      const itemRefundAmount = itemUnitPrice * item.qty;
+      totalRefundAmount += itemRefundAmount;
+    }
+
+    // Create return request
+    // Always store refund amount for both return and refund requests
+    const returnRequest = new ReturnRequest({
+      orderId: order._id,
+      userId: userId,
+      items: validItems,
+      status: 'requested',
+      requestType: requestType.toLowerCase(),
+      refundAmount: totalRefundAmount, // Always store refund amount
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    await returnRequest.save();
+
+    // Update order status if it's a full return/refund
+    const totalOrderedQty = order.items.reduce((sum, item) => sum + item.quantity, 0);
+    const totalRequestedQty = validItems.reduce((sum, item) => sum + item.qty, 0);
+
+    if (totalRequestedQty === totalOrderedQty) {
+      // Full return/refund
+      if (requestType.toLowerCase() === 'refund') {
+        order.status = 'REFUNDED';
+        order.refundAmount = totalRefundAmount;
+      } else {
+        order.status = 'RETURNED';
+        order.returnReason = reason || additionalNotes || 'Return requested';
+      }
+      await order.save();
+    }
+
+    res.status(201).json({ 
+      success: true, 
+      message: `${requestType} request created successfully`, 
+      returnRequest: {
+        id: returnRequest._id,
+        orderId: returnRequest.orderId,
+        status: returnRequest.status,
+        items: returnRequest.items,
+        refundAmount: returnRequest.refundAmount,
+        createdAt: returnRequest.createdAt
+      }
+    });
+  } catch (err) {
+    console.error('Error creating return/refund request:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// Return Order (Legacy - kept for backward compatibility)
 const returnOrder = async (req, res) => {
   try {
     const { orderId, reason } = req.body;
@@ -491,7 +818,7 @@ const returnOrder = async (req, res) => {
   }
 };
 
-// Refund Order
+// Refund Order (Legacy - kept for backward compatibility)
 const refundOrder = async (req, res) => {
   try {
     const { orderId, refundAmount } = req.body;
@@ -514,7 +841,7 @@ const getOrderHistory = async (req, res) => {
   console.log(req.user.id);
   try {
     const orders = await productOrder.find({ user: req.user.id }).sort({ createdAt: -1 }).populate("items.productDataid");
-     console.log("req.user.id",orders);
+    console.log("req.user.id", orders);
     res.json({ success: true, orders });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -540,15 +867,15 @@ const getAllOrdersAdmin = async (req, res) => {
 
     // Build filter object
     const filter = {};
-    
+
     if (status) {
       filter.status = status;
     }
-    
+
     if (type) {
       filter.type = type;
     }
-    
+
     if (startDate || endDate) {
       filter.createdAt = {};
       if (startDate) {
@@ -558,7 +885,7 @@ const getAllOrdersAdmin = async (req, res) => {
         filter.createdAt.$lte = new Date(endDate);
       }
     }
-    
+
     if (search) {
       filter.$or = [
         { orderId: { $regex: search, $options: 'i' } },
@@ -627,10 +954,10 @@ const getAllOrdersAdmin = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching orders for admin:", error);
-    res.status(500).json({ 
-      status: false, 
-      message: "Error fetching orders", 
-      error: error.message 
+    res.status(500).json({
+      status: false,
+      message: "Error fetching orders",
+      error: error.message
     });
   }
 };
@@ -654,15 +981,15 @@ const getAllProductOrdersAdmin = async (req, res) => {
 
     // Build filter object
     const filter = {};
-    
+
     if (status) {
       filter.status = status;
     }
-    
+
     if (paymentStatus) {
       filter.paymentStatus = paymentStatus;
     }
-    
+
     if (startDate || endDate) {
       filter.createdAt = {};
       if (startDate) {
@@ -672,7 +999,7 @@ const getAllProductOrdersAdmin = async (req, res) => {
         filter.createdAt.$lte = new Date(endDate);
       }
     }
-    
+
     if (search) {
       filter.$or = [
         { orderId: { $regex: search, $options: 'i' } },
@@ -771,23 +1098,983 @@ const getAllProductOrdersAdmin = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching product orders for admin:", error);
-    res.status(500).json({ 
-      status: false, 
-      message: "Error fetching product orders", 
-      error: error.message 
+    res.status(500).json({
+      status: false,
+      message: "Error fetching product orders",
+      error: error.message
     });
   }
 };
 
+
+
+// 1️⃣ Generate Access Token
+const  generateTokenPhonePe = async (req, res) => {
+  try {
+    const requestHeaders = {
+      "Content-Type": "application/x-www-form-urlencoded",
+    };
+
+    const requestBodyJson = {
+      client_version: 1,
+      grant_type: "client_credentials",
+      // client_id: process.env.PHONEPE_CLIENT_ID || "TEST-M23HLKE4QF87Z_25102",
+      client_id: "SU2510291510109164659318",
+      client_secret:
+        "ddb63c2f-a914-4a9b-9fc1-cef4b97a7a24",
+      // client_id: "TEST-M23HLKE4QF87Z_25102",
+      // client_secret:
+      //   "Y2E1NWFhOGQtZjQ1YS00MjNmLThiZDYtYjA1NjlhMWUwOTVl",
+    };
+
+    const requestBody = new URLSearchParams(requestBodyJson).toString();
+
+    const { data } = await axios.post(
+      // "https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token",
+      "https://api.phonepe.com/apis/identity-manager/v1/oauth/token",
+      requestBody,
+      { headers: requestHeaders }
+    );
+
+    res.status(200).json(data);
+  } catch (error) {
+    console.error("Token Error:", error.response?.data || error.message);
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate token",
+      error: error.response?.data || error.message,
+    });
+  }
+};
+
+// 2️⃣ Create Payment Order
+const createOrderPhonePe = async (req, res) => {
+  try {
+    const { access_token, merchantOrderId, amount } = req.body;
+
+    if (!access_token)
+      return res
+        .status(400)
+        .json({ success: false, message: "Missing access_token" });
+
+    const data = {
+      merchantOrderId: merchantOrderId || `TXN-${Date.now()}`,
+      amount: amount || 100,
+      expireAfter: 1200,
+      metaInfo: { udf1: "extra-info" },
+      paymentFlow: { type: "PG_CHECKOUT" },
+    };
+
+    const config = {
+      method: "post",
+      // url: "https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/sdk/order",
+      url: "https://api.phonepe.com/apis/pg/checkout/v2/sdk/order",
+      headers: {
+        Authorization: `O-Bearer ${access_token}`,
+        "Content-Type": "application/json",
+      },
+      data: JSON.stringify(data),
+    };
+
+    const response = await axios.request(config);
+
+    res.status(200).json({
+      success: true,
+      data: response.data,
+    });
+  } catch (error) {
+    console.error("Order Error:", error.response?.data || error.message);
+    res.status(500).json({
+      success: false,
+      message: "Failed to create order",
+      error: error.response?.data || error.message,
+    });
+  }
+};
+
+
+const checkPhonePeOrderStatus = async (req, res) => {
+  try {
+    const { access_token, merchantOrderId } = req.body;
+
+    if (!access_token)
+      return res.status(400).json({
+        success: false,
+        message: "Missing access_token",
+      });
+
+    if (!merchantOrderId)
+      return res.status(400).json({
+        success: false,
+        message: "Missing merchantOrderId",
+      });
+
+    const config = {
+      method: "get",
+      url: `https://api.phonepe.com/apis/pg-sandbox/checkout/v2/order/${merchantOrderId}/status`,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `O-Bearer ${access_token}`,
+      },
+    };
+
+    const response = await axios.request(config);
+
+    return res.status(200).json({
+      success: true,
+      message: "Order status fetched successfully",
+      data: response.data,
+    });
+
+  } catch (error) {
+    console.error("PhonePe Status Error:", error.response?.data || error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch order status",
+      error: error.response?.data || error.message,
+    });
+  }
+};
+
+
+
+
+
+
+
+// ==========================
+// ADMIN: GET ALL RETURN/REFUND REQUESTS
+// ==========================
+const getAllReturnRefundRequestsAdmin = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      status,
+      requestType,
+      startDate,
+      endDate,
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    const ReturnRequest = require('../models/returnRequest');
+    
+    // Build filter object
+    const filter = {};
+
+    if (status) {
+      filter.status = status;
+    }
+
+    if (requestType) {
+      filter.requestType = requestType;
+    }
+
+    if (startDate || endDate) {
+      filter.createdAt = {};
+      if (startDate) {
+        filter.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        filter.createdAt.$lte = new Date(endDate);
+      }
+    }
+
+    // Build sort object
+    const sort = {};
+    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Get return requests with pagination and populate order and user data
+    const returnRequests = await ReturnRequest
+      .find(filter)
+      .populate('orderId', 'orderCode totalAmount status deliveryAddress')
+      .populate('userId', 'name email phone')
+      .populate('items.productId', 'name brand images sellingprice')
+      .sort(sort)
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // Filter by search term if provided (after population)
+    let filteredRequests = returnRequests;
+    if (search) {
+      const searchLower = search.toLowerCase();
+      filteredRequests = returnRequests.filter(request => {
+        const orderCode = request.orderId?.orderCode?.toLowerCase() || '';
+        const userName = request.userId?.name?.toLowerCase() || '';
+        const userEmail = request.userId?.email?.toLowerCase() || '';
+        return orderCode.includes(searchLower) || 
+               userName.includes(searchLower) || 
+               userEmail.includes(searchLower);
+      });
+    }
+
+    // Get total count for pagination
+    const totalRequests = await ReturnRequest.countDocuments(filter);
+    const totalPages = Math.ceil(totalRequests / parseInt(limit));
+
+    // Calculate summary statistics
+    const stats = await ReturnRequest.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          totalRefundAmount: { 
+            $sum: { 
+              $ifNull: ['$refundAmount', 0] 
+            } 
+          },
+          totalRequests: { $sum: 1 },
+          averageRefundAmount: { 
+            $avg: { 
+              $ifNull: ['$refundAmount', 0] 
+            } 
+          }
+        }
+      }
+    ]);
+
+    const summary = stats.length > 0 ? stats[0] : {
+      totalRefundAmount: 0,
+      totalRequests: 0,
+      averageRefundAmount: 0
+    };
+
+    // Get status-wise breakdown
+    const statusBreakdown = await ReturnRequest.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          totalRefundAmount: { 
+            $sum: { 
+              $ifNull: ['$refundAmount', 0] 
+            } 
+          }
+        }
+      }
+    ]);
+
+    res.status(200).json({
+      status: true,
+      message: "All return/refund requests fetched successfully",
+      data: {
+        returnRequests: filteredRequests,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages,
+          totalRequests,
+          hasNextPage: parseInt(page) < totalPages,
+          hasPrevPage: parseInt(page) > 1,
+          limit: parseInt(limit)
+        },
+        summary: {
+          totalRefundAmount: summary.totalRefundAmount || 0,
+          totalRequests: summary.totalRequests || 0,
+          averageRefundAmount: Math.round((summary.averageRefundAmount || 0) * 100) / 100
+        },
+        breakdown: {
+          status: statusBreakdown
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching return/refund requests for admin:", error);
+    res.status(500).json({
+      status: false,
+      message: "Error fetching return/refund requests",
+      error: error.message
+    });
+  }
+};
+
+// ==========================
+// ADMIN: ACCEPT RETURN/REFUND REQUEST
+// ==========================
+const acceptReturnRefundRequest = async (req, res) => {
+  try {
+    const { requestId } = req.body;
+
+    if (!requestId) {
+      return res.status(400).json({
+        success: false,
+        error: "Request ID is required"
+      });
+    }
+
+    const ReturnRequest = require('../models/returnRequest');
+    const returnRequest = await ReturnRequest.findById(requestId)
+      .populate('orderId')
+      .populate('items.productId');
+
+    if (!returnRequest) {
+      return res.status(404).json({
+        success: false,
+        error: "Return/refund request not found"
+      });
+    }
+
+    if (returnRequest.status !== 'requested') {
+      return res.status(400).json({
+        success: false,
+        error: `Request is already ${returnRequest.status}`
+      });
+    }
+
+    // Update request status
+    returnRequest.status = 'approved';
+    returnRequest.updatedAt = new Date();
+    await returnRequest.save();
+
+    // Update order status when return/refund is approved
+    // Handle both populated and unpopulated orderId
+    const orderId = returnRequest.orderId._id 
+      ? returnRequest.orderId._id.toString() 
+      : returnRequest.orderId.toString();
+    
+    const order = await productOrder.findById(orderId);
+    if (order) {
+      const totalOrderedQty = order.items.reduce((sum, item) => sum + item.quantity, 0);
+      const totalRequestedQty = returnRequest.items.reduce((sum, item) => sum + item.qty, 0);
+
+      // Always update refund amount when return/refund is approved
+      if (returnRequest.refundAmount) {
+        order.refundAmount = (order.refundAmount || 0) + returnRequest.refundAmount;
+      }
+
+      if (totalRequestedQty === totalOrderedQty) {
+        // Full return/refund - mark order as fully returned/refunded
+        if (returnRequest.requestType === 'refund') {
+          order.status = 'REFUNDED';
+        } else {
+          order.status = 'RETURNED';
+          order.returnReason = returnRequest.items[0]?.reason || 'Return approved';
+        }
+      } else {
+        // Partial return/refund - mark order as in progress
+        if (returnRequest.requestType === 'refund') {
+          order.status = 'REFUND_IN_PROGRESS';
+        } else {
+          order.status = 'RETURN_IN_PROGRESS';
+          order.returnReason = returnRequest.items[0]?.reason || 'Return approved';
+        }
+      }
+      await order.save();
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Return/refund request approved successfully",
+      returnRequest
+    });
+  } catch (err) {
+    console.error('Error accepting return/refund request:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+};
+
+// ==========================
+// GET RETURN/REFUND REQUEST BY ORDER ID (USER)
+// ==========================
+const getReturnRefundRequestByOrderId = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const userId = req.user.id;
+
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        error: "Order ID is required"
+      });
+    }
+
+    const ReturnRequest = require('../models/returnRequest');
+    
+    // Find return request for this order and user (get the latest one)
+    const returnRequests = await ReturnRequest
+      .find({ orderId: orderId, userId: userId })
+      .populate('orderId', 'orderCode totalAmount status')
+      .populate('items.productId', 'name brand images')
+      .sort({ createdAt: -1 })
+      .limit(1);
+    
+    const returnRequest = returnRequests.length > 0 ? returnRequests[0] : null;
+
+    if (!returnRequest) {
+      return res.status(200).json({
+        success: true,
+        hasRequest: false,
+        message: "No return/refund request found for this order"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      hasRequest: true,
+      returnRequest: {
+        id: returnRequest._id,
+        orderId: returnRequest.orderId?._id || returnRequest.orderId,
+        status: returnRequest.status,
+        requestType: returnRequest.requestType,
+        items: returnRequest.items,
+        refundAmount: returnRequest.refundAmount || 0,
+        rejectionMessage: returnRequest.rejectionMessage,
+        createdAt: returnRequest.createdAt,
+        updatedAt: returnRequest.updatedAt
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching return/refund request:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+};
+
+// ==========================
+// GET USER RETURN/REFUND HISTORY
+// ==========================
+const getUserReturnRefundHistory = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const {
+      page = 1,
+      limit = 10,
+      status,
+      requestType,
+      startDate,
+      endDate,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    const ReturnRequest = require('../models/returnRequest');
+    
+    // Build filter object
+    const filter = { userId: userId };
+
+    if (status) {
+      filter.status = status;
+    }
+
+    if (requestType) {
+      filter.requestType = requestType;
+    }
+
+    if (startDate || endDate) {
+      filter.createdAt = {};
+      if (startDate) {
+        filter.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        filter.createdAt.$lte = new Date(endDate);
+      }
+    }
+
+    // Build sort object
+    const sort = {};
+    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Get return requests with pagination and populate order and product data
+    const returnRequests = await ReturnRequest
+      .find(filter)
+      .populate({
+        path: 'orderId',
+        select: 'orderCode totalAmount status deliveryAddress createdAt items',
+        populate: {
+          path: 'items.productDataid',
+          select: 'name brand images sellingprice'
+        }
+      })
+      .populate({
+        path: 'items.productId',
+        select: 'name brand images sellingprice',
+        model: 'Product'
+      })
+      .sort(sort)
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // Get total count for pagination
+    const totalRequests = await ReturnRequest.countDocuments(filter);
+    const totalPages = Math.ceil(totalRequests / parseInt(limit));
+
+    // Format response with fallback to order items if productId is not populated
+    const Product = require('../models/product_model');
+    const formattedRequests = await Promise.all(returnRequests.map(async (request) => {
+      const formattedItems = await Promise.all(request.items.map(async (item) => {
+        let productName = 'Unknown Product';
+        let productImage = '';
+        let productPrice = 0;
+        let productId = item.productId;
+
+        // Try to get product data from populated productId
+        // Check if productId is populated (has name property) or is just an ObjectId
+        if (item.productId) {
+          if (typeof item.productId === 'object' && item.productId.name) {
+            // Product is populated
+            productName = item.productId.name || 'Unknown Product';
+            productImage = (item.productId.images && item.productId.images.length > 0) 
+              ? item.productId.images[0] 
+              : '';
+            productPrice = item.productId.sellingprice || 0;
+            productId = item.productId._id || item.productId;
+          } else {
+            // productId is just an ObjectId, need to fetch or use fallback
+            productId = item.productId._id || item.productId;
+          }
+        }
+        
+        // If we still don't have product data, try fallbacks
+        if (productName === 'Unknown Product') {
+          // Fallback: Try to get product from order items
+          if (request.orderId && request.orderId.items) {
+            const itemProductIdStr = productId?.toString();
+            const orderItem = request.orderId.items.find(oi => {
+              if (!oi.productDataid) return false;
+              
+              const oiProductId = oi.productDataid._id 
+                ? oi.productDataid._id.toString() 
+                : oi.productDataid.toString();
+              
+              return oiProductId === itemProductIdStr;
+            });
+
+            if (orderItem && orderItem.productDataid) {
+              if (orderItem.productDataid.name) {
+                productName = orderItem.productDataid.name;
+                productImage = orderItem.productDataid.images?.[0] || '';
+                productPrice = orderItem.productDataid.sellingprice || 0;
+              }
+            }
+          }
+
+          // Last fallback: Fetch product directly from database
+          if (productName === 'Unknown Product' && productId) {
+            try {
+              const product = await Product.findById(productId);
+              if (product) {
+                productName = product.name || 'Unknown Product';
+                productImage = product.images?.[0] || '';
+                productPrice = product.sellingprice || 0;
+              }
+            } catch (err) {
+              console.error('Error fetching product:', err);
+            }
+          }
+        }
+
+        return {
+          productId: productId,
+          productName: productName,
+          productImage: productImage,
+          qty: item.qty,
+          reason: item.reason,
+          price: productPrice
+        };
+      }));
+
+      return {
+        id: request._id,
+        orderId: request.orderId?._id || request.orderId,
+        orderCode: request.orderId?.orderCode || 'N/A',
+        status: request.status,
+        requestType: request.requestType,
+        items: formattedItems,
+        refundAmount: request.refundAmount || 0,
+        rejectionMessage: request.rejectionMessage,
+        createdAt: request.createdAt,
+        updatedAt: request.updatedAt
+      };
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: "Return/refund history fetched successfully",
+      data: {
+        returnRequests: formattedRequests,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages,
+          totalRequests,
+          hasNextPage: parseInt(page) < totalPages,
+          hasPrevPage: parseInt(page) > 1,
+          limit: parseInt(limit)
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching user return/refund history:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+};
+
+// ==========================
+// ADMIN: REJECT RETURN/REFUND REQUEST
+// ==========================
+const rejectReturnRefundRequest = async (req, res) => {
+  try {
+    const { requestId, rejectionMessage } = req.body;
+
+    if (!requestId) {
+      return res.status(400).json({
+        success: false,
+        error: "Request ID is required"
+      });
+    }
+
+    if (!rejectionMessage || rejectionMessage.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: "Rejection message is required"
+      });
+    }
+
+    const ReturnRequest = require('../models/returnRequest');
+    const returnRequest = await ReturnRequest.findById(requestId);
+
+    if (!returnRequest) {
+      return res.status(404).json({
+        success: false,
+        error: "Return/refund request not found"
+      });
+    }
+
+    if (returnRequest.status !== 'requested') {
+      return res.status(400).json({
+        success: false,
+        error: `Request is already ${returnRequest.status}`
+      });
+    }
+
+    // Update request status and rejection message
+    returnRequest.status = 'rejected';
+    returnRequest.rejectionMessage = rejectionMessage.trim();
+    returnRequest.updatedAt = new Date();
+    await returnRequest.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Return/refund request rejected successfully",
+      returnRequest
+    });
+  } catch (err) {
+    console.error('Error rejecting return/refund request:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+};
+
+// Get investment orders grouped by month for chart
+const getInvestmentOrdersByMonth = (async (req, res) => {
+  try {
+    const { months = 12 } = req.query; // Default to last 12 months
+    
+    // Calculate date range
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - parseInt(months));
+    
+    // Aggregate investment orders by month, separated by gold and silver
+    const monthlyData = await transactionSchema.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startDate, $lte: endDate },
+          transactionType: { $exists: true, $ne: null }
+        }
+      },
+      {
+        $addFields: {
+          normalizedType: {
+            $toUpper: {
+              $ifNull: ['$transactionType', '']
+            }
+          }
+        }
+      },
+      {
+        $match: {
+          normalizedType: { $in: ['GOLD', 'SILVER'] }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: '$createdAt' },
+            month: { $month: '$createdAt' },
+            type: '$normalizedType'
+          },
+          totalValue: { $sum: { $ifNull: ['$inramount', 0] } },
+          orderCount: { $sum: 1 }
+        }
+      },
+      {
+        $sort: {
+          '_id.year': 1,
+          '_id.month': 1,
+          '_id.type': 1
+        }
+      }
+    ]);
+    
+    // Get all months in the range
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthsList = [];
+    const currentDate = new Date(startDate);
+    
+    while (currentDate <= endDate) {
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth() + 1;
+      const monthKey = `${year}-${month}`;
+      monthsList.push({
+        key: monthKey,
+        year,
+        month,
+        label: `${monthNames[month - 1]} ${year}`
+      });
+      currentDate.setMonth(currentDate.getMonth() + 1);
+    }
+    
+    // Initialize data structure
+    const goldData = new Array(monthsList.length).fill(0);
+    const silverData = new Array(monthsList.length).fill(0);
+    const goldOrderCounts = new Array(monthsList.length).fill(0);
+    const silverOrderCounts = new Array(monthsList.length).fill(0);
+    
+    // Fill in the data
+    monthlyData.forEach(item => {
+      const monthIndex = monthsList.findIndex(m => 
+        m.year === item._id.year && m.month === item._id.month
+      );
+      
+      if (monthIndex !== -1) {
+        if (item._id.type === 'GOLD') {
+          goldData[monthIndex] = item.totalValue || 0;
+          goldOrderCounts[monthIndex] = item.orderCount || 0;
+        } else if (item._id.type === 'SILVER') {
+          silverData[monthIndex] = item.totalValue || 0;
+          silverOrderCounts[monthIndex] = item.orderCount || 0;
+        }
+      }
+    });
+    
+    // Format response
+    const chartData = {
+      categories: monthsList.map(m => m.label),
+      series: [
+        {
+          name: 'Gold',
+          data: goldData,
+          orderCounts: goldOrderCounts
+        },
+        {
+          name: 'Silver',
+          data: silverData,
+          orderCounts: silverOrderCounts
+        }
+      ],
+      summary: {
+        totalGoldValue: goldData.reduce((sum, val) => sum + val, 0),
+        totalSilverValue: silverData.reduce((sum, val) => sum + val, 0),
+        totalGoldOrders: goldOrderCounts.reduce((sum, val) => sum + val, 0),
+        totalSilverOrders: silverOrderCounts.reduce((sum, val) => sum + val, 0)
+      }
+    };
+    
+    res.status(200).json({
+      status: true,
+      message: "Investment orders by month fetched successfully",
+      data: chartData
+    });
+  } catch (error) {
+    console.error("Error fetching investment orders by month:", error);
+    res.status(500).json({
+      status: false,
+      message: "Error fetching investment orders by month",
+      error: error.message
+    });
+  }
+});
+
+// Get Total Revenue from Commerce Orders (excluding returns/refunds)
+const getTotalRevenue = (async (req, res) => {
+  try {
+    // Calculate revenue from all orders, properly handling returns/refunds
+    // For fully returned/refunded orders: exclude from revenue (netAmount = 0)
+    // For partial returns/refunds: subtract refundAmount from totalAmount
+    // For normal orders: use totalAmount as-is
+    const revenueData = await productOrder.aggregate([
+      {
+        $project: {
+          totalAmount: { $ifNull: ['$totalAmount', 0] },
+          status: 1,
+          refundAmount: { $ifNull: ['$refundAmount', 0] },
+          // Calculate net amount per order
+          netAmount: {
+            $cond: {
+              if: { $in: ['$status', ['RETURNED', 'REFUNDED']] },
+              then: 0, // Fully returned/refunded orders contribute 0 to revenue
+              else: {
+                $subtract: [
+                  { $ifNull: ['$totalAmount', 0] },
+                  { $ifNull: ['$refundAmount', 0] }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: '$netAmount' },
+          totalOrders: {
+            $sum: {
+              $cond: {
+                if: { $in: ['$status', ['RETURNED', 'REFUNDED']] },
+                then: 0, // Don't count fully returned/refunded orders
+                else: 1
+              }
+            }
+          },
+          averageOrderValue: { $avg: '$netAmount' },
+          totalRefunded: {
+            $sum: {
+              $cond: {
+                if: { $gt: [{ $ifNull: ['$refundAmount', 0] }, 0] },
+                then: { $ifNull: ['$refundAmount', 0] },
+                else: 0
+              }
+            }
+          },
+          refundedOrders: {
+            $sum: {
+              $cond: {
+                if: { $gt: [{ $ifNull: ['$refundAmount', 0] }, 0] },
+                then: 1,
+                else: 0
+              }
+            }
+          }
+        }
+      }
+    ]);
+
+    const result = revenueData.length > 0 ? revenueData[0] : {
+      totalRevenue: 0,
+      totalOrders: 0,
+      averageOrderValue: 0,
+      totalRefunded: 0,
+      refundedOrders: 0
+    };
+
+    res.status(200).json({
+      status: true,
+      message: "Total revenue calculated successfully",
+      data: {
+        totalRevenue: result.totalRevenue || 0,
+        totalOrders: result.totalOrders || 0,
+        averageOrderValue: result.averageOrderValue || 0,
+        totalRefunded: result.totalRefunded || 0,
+        refundedOrders: result.refundedOrders || 0,
+        netRevenue: result.totalRevenue || 0 // Already net (totalAmount - refundAmount for each order)
+      }
+    });
+  } catch (error) {
+    console.error("Error calculating total revenue:", error);
+    res.status(500).json({
+      status: false,
+      message: "Error calculating total revenue",
+      error: error.message
+    });
+  }
+});
+
+// Get Total Investment Orders Value and Count
+const getTotalInvestmentOrders = (async (req, res) => {
+  try {
+    // Aggregate investment orders (GOLD and SILVER) to get total value and count
+    const investmentData = await transactionSchema.aggregate([
+      {
+        $addFields: {
+          normalizedType: {
+            $toUpper: {
+              $ifNull: ['$transactionType', '']
+            }
+          }
+        }
+      },
+      {
+        $match: {
+          normalizedType: { $in: ['GOLD', 'SILVER'] }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalValue: { $sum: { $ifNull: ['$inramount', 0] } },
+          totalOrders: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const result = investmentData.length > 0 ? investmentData[0] : {
+      totalValue: 0,
+      totalOrders: 0
+    };
+
+    res.status(200).json({
+      status: true,
+      message: "Total investment orders calculated successfully",
+      data: {
+        totalValue: result.totalValue || 0,
+        totalOrders: result.totalOrders || 0
+      }
+    });
+  } catch (error) {
+    console.error("Error calculating total investment orders:", error);
+    res.status(500).json({
+      status: false,
+      message: "Error calculating total investment orders",
+      error: error.message
+    });
+  }
+});
+
 module.exports = {
-  placeOrder, returnOrder, refundOrder, getOrderHistory,
+  placeOrder, returnOrder, refundOrder, createReturnRefundRequest, getOrderHistory,generateTokenPhonePe,createOrderPhonePe,checkPhonePeOrderStatus,
   buyOrSellGold,
   getAllOrderHistory,
   getUserOrderHistory,
   getParticularOrderHistory,
   depositINR,
-  withdrawINR, 
-  createOrder,
+  withdrawINR,
   getAllOrdersAdmin,
-  getAllProductOrdersAdmin
+  getAllProductOrdersAdmin,
+  getAllReturnRefundRequestsAdmin,
+  acceptReturnRefundRequest,
+  rejectReturnRefundRequest,
+  getReturnRefundRequestByOrderId,
+  getUserReturnRefundHistory,
+  getInvestmentOrdersByMonth,
+  getTotalRevenue,
+  getTotalInvestmentOrders
 };

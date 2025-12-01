@@ -535,4 +535,113 @@ const addTicketReply = asyncHandler(async (req, res) => {
 
 
 
-module.exports = { updateTicketStatus, getuserByIds, getTicketById, getMyTickets, createTicket, addToWishlist, removeFromWishlist, getWishlist, addAddress, getAddresses, deleteAddress, updateAddress, updateuserById, getuserById, getAllUser, deleteuserById, getGoldprice, setTransactionPin, verifyTransactionPin, getAllTickets, getTicketByIdAdmin, updateTicketStatusAdmin, getTicketStats, addTicketReply }
+// Get referred users for admin panel
+const getReferredUsers = asyncHandler(async (req, res) => {
+  try {
+    const { page = 1, limit = 20, userId } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    let query = {};
+    
+    // If userId is provided, get users referred by that specific user
+    if (userId) {
+      query.referredBy = userId;
+    } else {
+      // Get all users who were referred (have a referredBy field)
+      query.referredBy = { $exists: true, $ne: null };
+    }
+
+    const referredUsers = await User.find(query)
+      .populate('referredBy', 'name email referralCode')
+      .select('name email phone _id referralPoints kycVerified panVerified mobileVerified createdAt')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await User.countDocuments(query);
+
+    // Format response
+    const formattedUsers = referredUsers.map(user => ({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      userId: user._id,
+      referralPoints: user.referralPoints || 0,
+      kycVerified: user.kycVerified || false,
+      panVerified: user.panVerified || false,
+      mobileVerified: user.mobileVerified || false,
+      referredBy: user.referredBy ? {
+        _id: user.referredBy._id,
+        name: user.referredBy.name,
+        email: user.referredBy.email,
+        referralCode: user.referredBy.referralCode
+      } : null,
+      createdAt: user.createdAt
+    }));
+
+    res.status(200).json({
+      status: true,
+      message: "Referred users fetched successfully",
+      data: {
+        users: formattedUsers,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / parseInt(limit))
+        }
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: false,
+      message: "Failed to fetch referred users",
+      error: error.message
+    });
+  }
+});
+
+// Get referral statistics for admin
+const getReferralStats = asyncHandler(async (req, res) => {
+  try {
+    const stats = await User.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalReferredUsers: { $sum: { $cond: [{ $ne: ['$referredBy', null] }, 1, 0] } },
+          totalKycVerified: { $sum: { $cond: [{ $eq: ['$kycVerified', true] }, 1, 0] } },
+          totalReferralPointsGiven: { $sum: '$referralPoints' },
+          totalReferralCount: { $sum: '$referralCount' }
+        }
+      }
+    ]);
+
+    const topReferrers = await User.find({ referralCount: { $gt: 0 } })
+      .select('name email referralCode referralCount referralPoints')
+      .sort({ referralCount: -1 })
+      .limit(10);
+
+    res.status(200).json({
+      status: true,
+      message: "Referral statistics fetched successfully",
+      data: {
+        overview: stats[0] || {
+          totalReferredUsers: 0,
+          totalKycVerified: 0,
+          totalReferralPointsGiven: 0,
+          totalReferralCount: 0
+        },
+        topReferrers
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: false,
+      message: "Failed to fetch referral statistics",
+      error: error.message
+    });
+  }
+});
+
+module.exports = { updateTicketStatus, getuserByIds, getTicketById, getMyTickets, createTicket, addToWishlist, removeFromWishlist, getWishlist, addAddress, getAddresses, deleteAddress, updateAddress, updateuserById, getuserById, getAllUser, deleteuserById, getGoldprice, setTransactionPin, verifyTransactionPin, getAllTickets, getTicketByIdAdmin, updateTicketStatusAdmin, getTicketStats, addTicketReply, getReferredUsers, getReferralStats }

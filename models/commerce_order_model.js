@@ -15,12 +15,14 @@ const ProductOrderSchema = new mongoose.Schema(
     totalAmount: { type: Number, required: true },
     status: {
       type: String,
-      enum: ["PLACED","CONFIRMED", "RETURNED", "REFUNDED"],
+      enum: ["PLACED","CONFIRMED", "SHIPPED", "DELIVERED", "RETURNED", "REFUNDED", "RETURN_IN_PROGRESS", "REFUND_IN_PROGRESS"],
       default: "PLACED",
     },
     returnReason: { type: String },
     deliveryAddress: { type: String },
     refundAmount: { type: Number },
+    // Shipment reference
+    shipmentId: { type: mongoose.Schema.Types.ObjectId, ref: "Shipment" },
   },
   { timestamps: true }
 );

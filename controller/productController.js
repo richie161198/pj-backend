@@ -408,6 +408,60 @@ const removeFromCart = expressAsyncHandler(async (req, res) => {
   }
 });
 
+const decrementCartItem = expressAsyncHandler(async (req, res) => {
+  try {
+    const { productId } = req.body;
+    const userId = req.user.id;
+    let cart = await Cart.findOne({ userId });
+    
+    if (!cart) {
+      return res.status(404).json({ status: false, message: "❌ Cart not found" });
+    }
+
+    // Find the item in cart
+    const itemIndex = cart.items.findIndex(
+      (item) => item.productId.toString() === productId.toString()
+    );
+
+    if (itemIndex === -1) {
+      return res.status(404).json({ status: false, message: "❌ Item not found in cart" });
+    }
+
+    const item = cart.items[itemIndex];
+    const wasRemoved = item.qty === 1;
+    
+    // Decrement quantity by 1
+    if (item.qty > 1) {
+      item.qty -= 1;
+    } else {
+      // If quantity is 1, remove the item from cart
+      cart.items.splice(itemIndex, 1);
+    }
+
+    // Recalculate total
+    cart.total = cart.items.reduce(
+      (acc, item) => acc + Number(item.qty) * Number(item.priceAtAdded || 0),
+      0
+    );
+
+    // If cart is empty, reset total
+    if (cart.items.length === 0) {
+      cart.total = 0;
+    }
+
+    cart.updatedAt = Date.now();
+    await cart.save();
+
+    res.status(200).json({ 
+      status: true, 
+      message: wasRemoved ? "🗑️ Item removed" : "✅ Quantity decreased", 
+      cart 
+    });
+  } catch (error) {
+    res.status(500).json({ status: false, message: error.message });
+  }
+});
+
 
 
 const getCart = expressAsyncHandler(async (req, res) => {
@@ -578,5 +632,5 @@ module.exports = {
   deleteProduct,
   getAllProducts,
   getProductById,
-  bulkUploadProducts,getCategoryById,deleteCategory
+  bulkUploadProducts,getCategoryById,deleteCategory,decrementCartItem
 };

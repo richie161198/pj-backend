@@ -51,12 +51,7 @@ const initializeFirebase = () => {
 // Initialize Firebase on module load
 initializeFirebase();
 
-/**
- * Send notification to multiple devices
- * @param {Object} notificationData - Notification data
- * @param {Array} deviceTokens - Array of device tokens
- * @returns {Object} Result with success and failure counts
- */
+
 const sendNotification = async (notificationData, deviceTokens) => {
   try {
     if (!firebaseApp) {
@@ -99,6 +94,7 @@ const sendNotification = async (notificationData, deviceTokens) => {
         actionUrl: actionUrl || '',
         actionType: actionType || 'open_app',
         screenName: screenName || '',
+        imageUrl: imageUrl || '', // Include imageUrl in data payload for foreground notifications
         clickAction: actionType === 'open_url' ? actionUrl : 
                     actionType === 'open_screen' ? screenName : 'open_app'
       },
@@ -117,7 +113,8 @@ const sendNotification = async (notificationData, deviceTokens) => {
           ...data,
           actionUrl: actionUrl || '',
           actionType: actionType || 'open_app',
-          screenName: screenName || ''
+          screenName: screenName || '',
+          imageUrl: imageUrl || '' // Include imageUrl in Android data payload
         }
       },
       apns: {
@@ -148,7 +145,8 @@ const sendNotification = async (notificationData, deviceTokens) => {
           ...data,
           actionUrl: actionUrl || '',
           actionType: actionType || 'open_app',
-          screenName: screenName || ''
+          screenName: screenName || '',
+          imageUrl: imageUrl || '' // Include imageUrl in webpush data payload
         }
       }
     };
@@ -289,7 +287,8 @@ const sendToDevice = async (notificationData, deviceToken) => {
         ...data,
         actionUrl: actionUrl || '',
         actionType: actionType || 'open_app',
-        screenName: screenName || ''
+        screenName: screenName || '',
+        imageUrl: imageUrl || '' // Include imageUrl in data payload for foreground notifications
       },
       android: {
         notification: {
@@ -300,6 +299,13 @@ const sendToDevice = async (notificationData, deviceToken) => {
                       actionType === 'open_screen' ? screenName : 'FLUTTER_NOTIFICATION_CLICK',
           channelId: 'default',
           priority: 'high'
+        },
+        data: {
+          ...data,
+          actionUrl: actionUrl || '',
+          actionType: actionType || 'open_app',
+          screenName: screenName || '',
+          imageUrl: imageUrl || '' // Include imageUrl in Android data payload
         }
       },
       apns: {

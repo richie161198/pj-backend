@@ -59,12 +59,25 @@ const signUpRequest = asyncHandler(async (req, res) => {
         // Don't throw error - continue with registration
       }
       
+      // Find referring user if referral code provided
+      let referringUser = null;
+      if (referredBy) {
+        referringUser = await userModel.findOne({ referralCode: referredBy });
+        if (!referringUser) {
+          return res.status(400).json({ message: "Invalid referral code" });
+        }
+      }
+
       const user = await userModel.create({
         name,
         email,
         otp: { codeHash, expiresAt },
         referralCode: referralCode,
-        referredBy: referredBy,
+        referredBy: referringUser ? referringUser._id : null,
+        referralPoints: 0,
+        referralCount: 0,
+        kycVerified: false,
+        referralRewardGiven: false,
         appId: appId,
         phone,
         password: hashedPassword,
@@ -225,14 +238,44 @@ const verifyPan = asyncHandler(async (req, res) => {
     console.log(response.data, response.status, "response.status");
     if (response.status == 200) {
       if (response.data.valid == true) {
-
+        const wasKycVerified = user.kycVerified;
+        
         user.panDetails = response.data;
         user.panVerified = response.data.valid;
+        // Mark KYC as verified when PAN is verified
+        user.kycVerified = true;
+        
+        // Process referral rewards if KYC is just completed and user was referred
+        if (!wasKycVerified && user.referredBy && !user.referralRewardGiven) {
+          try {
+            // Give 50 points to the new user
+            user.referralPoints = (user.referralPoints || 0) + 50;
+            user.referralRewardGiven = true;
+            
+            // Give 25 points to the referring user and increment their referral count
+            const referringUser = await userModel.findById(user.referredBy);
+            if (referringUser) {
+              referringUser.referralPoints = (referringUser.referralPoints || 0) + 25;
+              referringUser.referralCount = (referringUser.referralCount || 0) + 1;
+              await referringUser.save();
+              
+              console.log(`Referral reward processed: New user ${user.email} got 50 points, Referring user ${referringUser.email} got 25 points`);
+            }
+          } catch (referralError) {
+            console.error('Error processing referral rewards:', referralError);
+            // Don't fail PAN verification if referral processing fails
+          }
+        }
+        
         await user.save();
         res.status(200).json({
           status: true,
           message: "PAN verified successfully",
-          details: response.data
+          details: response.data,
+          referralReward: user.referralRewardGiven ? {
+            newUserPoints: 50,
+            referringUserPoints: 25
+          } : null
         });
       } else {
         res.status(203).json({

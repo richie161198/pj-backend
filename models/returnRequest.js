@@ -1,11 +1,17 @@
 const mongoose = require("mongoose");
 
 const ReturnRequestSchema = new mongoose.Schema({
-  orderId: { type: mongoose.Schema.Types.ObjectId, ref: "Order" },
+  orderId: { type: mongoose.Schema.Types.ObjectId, ref: "ProductOrder" },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-  items: [{ productId: mongoose.Schema.Types.ObjectId, qty: Number, reason: String }],
+  items: [{ 
+    productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product" }, 
+    qty: Number, 
+    reason: String 
+  }],
   status: { type: String, enum: ["requested","approved","rejected","collected","completed"], default: "requested" },
   refundAmount: Number,
+  rejectionMessage: { type: String },
+  requestType: { type: String, enum: ["return", "refund"] },
   createdAt: { type: Date, default: Date.now },
   updatedAt: Date
 });
