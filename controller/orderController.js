@@ -8,13 +8,652 @@ const Shipment = require('../models/shipment_model');
 const User = require('../models/userModel');
 const Product = require('../models/product_model');
 const bmcService = require('../services/bmcService');
+const { sendEmail, sendEmailWithAttachment } = require('../helpers/mailer');
+const puppeteer = require('puppeteer');
+const fs = require('fs');
 const { Cashfree, CFEnvironment } = require("cashfree-pg");
+
+// Load logo for invoice PDF
+let logoBase64 = '';
+try {
+  logoBase64 = fs.readFileSync("public/logo/23.png").toString("base64");
+} catch (err) {
+  console.log('Logo file not found, using default');
+}
 var cashfree = new Cashfree(
   CFEnvironment.PRODUCTION,
   process.env.CASHFREE_APP_ID_prod,
   process.env.CASHFREE_SECRET_prod
 );
 const userModel = require("../models/userModel");
+
+// Helper function to generate order confirmation email HTML
+function generateOrderConfirmationEmailHTML(order, customer, products, pricing, invoiceNumber) {
+  const formatCurrency = (amount) => `₹${parseFloat(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const formatDate = (date) => new Date(date).toLocaleDateString('en-IN', { 
+    year: 'numeric', month: 'long', day: 'numeric' 
+  });
+  
+  const productRows = products.map(product => `
+    <tr>
+      <td style="padding: 12px; border-bottom: 1px solid #eee;">
+        <strong>${product.name}</strong><br>
+        <span style="color: #666; font-size: 12px;">SKU: ${product.sku || 'N/A'} | Qty: ${product.quantity}</span>
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">
+        ${formatCurrency(product.finalPrice)}
+      </td>
+    </tr>
+  `).join('');
+
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+      <div style="background: linear-gradient(135deg, #D4AF37 0%, #F4E4BC 100%); padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
+        <h1 style="color: #1a1a1a; margin: 0; font-size: 28px;">Order Confirmed! 🎉</h1>
+        <p style="color: #333; margin: 10px 0 0; font-size: 16px;">Thank you for shopping with Precious Goldsmith</p>
+      </div>
+      
+      <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+        <p style="font-size: 16px; color: #333; margin-bottom: 20px;">
+          Dear <strong>${customer.name || 'Valued Customer'}</strong>,
+        </p>
+        <p style="font-size: 15px; color: #555; line-height: 1.6;">
+          Your order has been successfully placed! We're preparing your precious items with care and will notify you once shipped.
+        </p>
+        
+        <!-- Order Info Box -->
+        <div style="background: linear-gradient(135deg, #f8f4e8 0%, #fff9e6 100%); padding: 20px; border-radius: 10px; margin: 25px 0; border-left: 4px solid #D4AF37;">
+          <table style="width: 100%;">
+            <tr>
+              <td style="padding: 5px 0;">
+                <span style="color: #666;">Order Number:</span><br>
+                <strong style="color: #D4AF37; font-size: 18px;">${order.orderCode}</strong>
+              </td>
+              <td style="padding: 5px 0; text-align: right;">
+                <span style="color: #666;">Invoice Number:</span><br>
+                <strong style="color: #333;">${invoiceNumber}</strong>
+              </td>
+            </tr>
+            <tr>
+              <td colspan="2" style="padding: 10px 0 0;">
+                <span style="color: #666;">Order Date:</span>
+                <strong style="color: #333; margin-left: 10px;">${formatDate(new Date())}</strong>
+              </td>
+            </tr>
+          </table>
+        </div>
+        
+        <!-- Products Table -->
+        <h3 style="color: #333; border-bottom: 2px solid #D4AF37; padding-bottom: 10px; margin-top: 30px;">Order Items</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+          ${productRows}
+        </table>
+        
+        <!-- Total Summary - Simple display since cart prices are final (include GST, charges, discounts) -->
+        <div style="background-color: #f9f9f9; padding: 20px; border-radius: 10px; margin-top: 20px;">
+          <table style="width: 100%;">
+            <tr style="border-top: 2px solid #D4AF37;">
+              <td style="padding: 15px 0 8px; font-weight: bold; font-size: 18px; color: #333;">Total Amount:</td>
+              <td style="padding: 15px 0 8px; text-align: right; font-weight: bold; font-size: 20px; color: #D4AF37;">${formatCurrency(pricing.grandTotal)}</td>
+            </tr>
+          </table>
+          <p style="margin: 10px 0 0; font-size: 12px; color: #888; text-align: center;">
+            (Inclusive of all taxes, making charges, and applicable discounts)
+          </p>
+        </div>
+        
+        <!-- Invoice Attachment Note -->
+        <div style="background-color: #e3f2fd; padding: 15px; border-radius: 8px; margin-top: 25px; text-align: center;">
+          <p style="margin: 0; color: #1565c0;">
+            📎 <strong>Your tax invoice is attached to this email as a PDF.</strong>
+          </p>
+        </div>
+        
+        <!-- Shipping Info -->
+        <div style="margin-top: 25px; padding: 20px; border: 1px dashed #D4AF37; border-radius: 10px;">
+          <h4 style="margin: 0 0 15px; color: #D4AF37;">📦 Shipping Information</h4>
+          <p style="margin: 0; color: #555; line-height: 1.6;">
+            Your order will be shipped within 2-3 business days. You will receive a tracking link via email once your order is dispatched.
+          </p>
+        </div>
+        
+        <!-- Footer -->
+        <div style="text-align: center; margin-top: 30px; padding-top: 25px; border-top: 1px solid #eee;">
+          <p style="color: #666; font-size: 14px; margin-bottom: 10px;">
+            Questions about your order? Contact us at<br>
+            <a href="mailto:contact@preciousgoldsmith.com" style="color: #D4AF37;">contact@preciousgoldsmith.com</a>
+          </p>
+          <p style="font-size: 12px; color: #999; margin-top: 20px;">
+            This is an automated email. Please do not reply directly.<br>
+            © ${new Date().getFullYear()} Precious Goldsmith. All rights reserved.
+          </p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Helper function to generate invoice PDF for order
+async function generateOrderInvoicePDF(invoice, customerDetails, products, pricing) {
+  const formatDate = (date) =>
+    new Date(date).toLocaleDateString('en-IN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+
+  const formatDateFull = (date) =>
+    new Date(date).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  const formatAmount = (amount) => parseFloat(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const numberToWords = (num) => {
+    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    if (num === 0) return 'Zero Rupees Only';
+    if (num < 0) return 'Negative ' + numberToWords(-num);
+    let result = '';
+    if (num >= 10000000) { result += numberToWords(Math.floor(num / 10000000)) + ' Crore '; num %= 10000000; }
+    if (num >= 100000) { result += numberToWords(Math.floor(num / 100000)) + ' Lakh '; num %= 100000; }
+    if (num >= 1000) { result += numberToWords(Math.floor(num / 1000)) + ' Thousand '; num %= 1000; }
+    if (num >= 100) { result += ones[Math.floor(num / 100)] + ' Hundred '; num %= 100; }
+    if (num >= 20) { result += tens[Math.floor(num / 10)] + ' '; num %= 10; }
+    else if (num >= 10) { result += teens[num - 10] + ' '; num = 0; }
+    if (num > 0) { result += ones[num] + ' '; }
+    return result.trim() + ' Rupees Only';
+  };
+
+  // Product table with Weight, Making Charges, GST, Discount details
+  const productRows = products.map((product, index) => {
+    const makingChargesDisplay = product.makingCharges > 0 
+      ? `₹${formatAmount(product.makingCharges)}`
+      : '-';
+    const gstDisplay = product.gst > 0 
+      ? `₹${formatAmount(product.gst)}${product.gstPercentage ? ` (${product.gstPercentage}%)` : ''}`
+      : '-';
+    const discountDisplay = product.discount > 0 
+      ? `₹${formatAmount(product.discount)}${product.discountPercentage ? ` (${product.discountPercentage}%)` : ''}`
+      : '-';
+    
+    return `
+      <tr>
+        <td>${index + 1}</td>
+        <td class="product-desc">${product.name || 'N/A'}</td>
+        <td class="purity-hsn">${product.purity || '22Karat'}<br>HSN: 711319</td>
+        <td class="qty">${product.quantity || 0}</td>
+        <td class="weight">${(product.weight || 0).toFixed(3)}g</td>
+        <td class="amount">${makingChargesDisplay}</td>
+        <td class="amount">${gstDisplay}</td>
+        <td class="amount">${discountDisplay}</td>
+        <td class="amount">₹${formatAmount(product.finalPrice)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const totalQty = products.reduce((sum, p) => sum + (p.quantity || 0), 0);
+  const totalWeight = products.reduce((sum, p) => sum + (p.weight || 0), 0);
+  const totalMakingChargesAmount = products.reduce((sum, p) => sum + (p.makingCharges || 0), 0);
+  const totalGSTAmount = products.reduce((sum, p) => sum + (p.gst || 0), 0);
+  const totalDiscountAmount = products.reduce((sum, p) => sum + (p.discount || 0), 0);
+
+  const totalRow = `
+    <tr style="font-weight: bold; background-color: #f5f5f5;">
+      <td colspan="3" style="text-align: right;">TOTAL</td>
+      <td class="qty">${totalQty}</td>
+      <td class="weight">${totalWeight.toFixed(3)}g</td>
+      <td class="amount">${totalMakingChargesAmount > 0 ? '₹' + formatAmount(totalMakingChargesAmount) : '-'}</td>
+      <td class="amount">${totalGSTAmount > 0 ? '₹' + formatAmount(totalGSTAmount) : '-'}</td>
+      <td class="amount">${totalDiscountAmount > 0 ? '₹' + formatAmount(totalDiscountAmount) : '-'}</td>
+      <td class="amount">₹${formatAmount(pricing.grandTotal)}</td>
+    </tr>
+  `;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Tax Invoice ${invoice.invoiceNumber}</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Arial', sans-serif; font-size: 12px; line-height: 1.4; color: #000; background: white; }
+        .invoice-container { margin: 0 auto; background: white; border: 1px solid #ddd; }
+        .header { text-align: center; padding: 20px; border-bottom: 2px solid #000; }
+        .logo { width: 50px; margin-bottom: 8px; }
+        .company-name { font-size: 18px; font-weight: bold; margin-bottom: 5px; }
+        .company-legal { font-size: 10px; color: #666; margin-bottom: 5px; }
+        .gstin { font-size: 11px; font-weight: bold; margin-bottom: 10px; }
+        .company-address { font-size: 11px; line-height: 1.3; margin-bottom: 10px; }
+        .contact-info { font-size: 10px; color: #666; }
+        .invoice-title { text-align: center; font-size: 16px; font-weight: bold; margin: 20px 0; text-decoration: underline; }
+        .invoice-details { display: flex; justify-content: space-between; margin-bottom: 20px; padding: 0 20px; }
+        .invoice-info, .order-info { flex: 1; }
+        .order-info { text-align: right; }
+        .info-row { display: flex; margin-bottom: 5px; }
+        .info-label { font-weight: bold; width: 120px; }
+        .info-value { flex: 1; }
+        .address-section { display: flex; margin-bottom: 20px; padding: 0 20px; }
+        .billing-address, .shipping-address { flex: 1; margin-right: 20px; }
+        .address-title { font-weight: bold; margin-bottom: 10px; text-decoration: underline; }
+        .address-content { font-size: 11px; line-height: 1.3; }
+        .products-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 11px; }
+        .products-table th, .products-table td { border: 1px solid #000; padding: 8px; text-align: center; vertical-align: middle; }
+        .products-table th { background-color: #D4AF37; color: #000; font-weight: bold; }
+        .products-table .product-desc { text-align: left; min-width: 200px; }
+        .products-table .purity-hsn { width: 80px; font-size: 10px; }
+        .products-table .qty { width: 50px; }
+        .products-table .weight { width: 70px; }
+        .products-table .amount { width: 100px; text-align: right; }
+        .totals-section { display: flex; justify-content: space-between; margin-bottom: 20px; padding: 0 20px; }
+        .amount-in-words { flex: 1; margin-right: 20px; }
+        .amount-in-words-title { font-weight: bold; margin-bottom: 5px; }
+        .payment-info { flex: 1; text-align: right; }
+        .total-box { background-color: #f5f5f5; padding: 15px; border: 2px solid #D4AF37; border-radius: 5px; }
+        .total-label { font-size: 14px; color: #666; }
+        .total-value { font-size: 20px; font-weight: bold; color: #D4AF37; }
+        .note-box { background-color: #fff9e6; padding: 10px; margin: 0 20px 20px; border-radius: 5px; font-size: 10px; color: #666; }
+        .terms-conditions { margin: 20px 0; padding: 0 20px; }
+        .terms-title { font-weight: bold; margin-bottom: 10px; text-decoration: underline; }
+        .terms-content { font-size: 9px; line-height: 1.3; }
+        .terms-list { margin-left: 15px; }
+        .terms-list li { margin-bottom: 3px; }
+      </style>
+    </head>
+    <body>
+      <div class="invoice-container">
+        <div class="header">
+          ${logoBase64 ? `<img src="data:image/png;base64,${logoBase64}" class="logo"/>` : '<div class="logo" style="font-size: 24px; font-weight: bold; color: #D4AF37;">PG</div>'}
+          <div class="company-name">PRECIOUS GOLDSMITH</div>
+          <div class="company-legal">KSAN INDUSTRIES LLP</div>
+          <div class="gstin">GSTIN NO: 33ABAFK98176AIZK</div>
+          <div class="company-address">
+            New No:46, Old No:70/1, Bazullah Road, T Nagar,<br>
+            Chennai - 600017, Tamil Nadu, India.
+          </div>
+          <div class="contact-info">
+            Email: contact@preciousgoldsmith.com<br>
+            Website: preciousgoldsmith.com
+          </div>
+        </div>
+
+        <div class="invoice-title">TAX INVOICE</div>
+
+        <div class="invoice-details">
+          <div class="invoice-info">
+            <div class="info-row">
+              <div class="info-label">Invoice No:</div>
+              <div class="info-value">${invoice.invoiceNumber}</div>
+            </div>
+            <div class="info-row">
+              <div class="info-label">Invoice Date:</div>
+              <div class="info-value">${formatDate(invoice.createdAt || new Date())}</div>
+            </div>
+          </div>
+          <div class="order-info">
+            <div class="info-row">
+              <div class="info-label">Order No:</div>
+              <div class="info-value">${invoice.orderId?.orderCode || 'N/A'}</div>
+            </div>
+            <div class="info-row">
+              <div class="info-label">Order Date:</div>
+              <div class="info-value">${formatDateFull(invoice.createdAt || new Date())}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="address-section">
+          <div class="billing-address">
+            <div class="address-title">Customer Billing Address:</div>
+            <div class="address-content">
+              <strong>${customerDetails.name}</strong><br>
+              ${customerDetails.address?.street || 'N/A'}<br>
+              ${customerDetails.address?.city || 'N/A'} - ${customerDetails.address?.pincode || 'N/A'}<br>
+              ${customerDetails.address?.state || 'N/A'}, India.
+            </div>
+          </div>
+          <div class="shipping-address">
+            <div class="address-title">Customer Shipping Address:</div>
+            <div class="address-content">
+              <strong>${customerDetails.name}</strong><br>
+              ${customerDetails.address?.street || 'N/A'}<br>
+              ${customerDetails.address?.city || 'N/A'} - ${customerDetails.address?.pincode || 'N/A'}<br>
+              ${customerDetails.address?.state || 'N/A'}, India.
+            </div>
+          </div>
+        </div>
+
+        <table class="products-table">
+          <thead>
+            <tr>
+              <th>SI No</th>
+              <th class="product-desc">Product Name</th>
+              <th class="purity-hsn">Purity / HSN</th>
+              <th class="qty">Qty</th>
+              <th class="weight">Weight</th>
+              <th class="amount">Making Charges</th>
+              <th class="amount">GST</th>
+              <th class="amount">Discount</th>
+              <th class="amount">Total (₹)</th>
+            </tr>
+          </thead>
+          <tbody>${productRows}${totalRow}</tbody>
+        </table>
+
+        <div class="note-box">
+          <strong>Note:</strong> All prices shown are inclusive of GST, making charges, and any applicable discounts.
+        </div>
+
+        <div class="totals-section">
+          <div class="amount-in-words">
+            <div class="amount-in-words-title">Invoice Amount (In Words):</div>
+            <div>${numberToWords(Math.round(pricing.grandTotal || 0))}</div>
+          </div>
+          <div class="payment-info">
+            <div class="total-box">
+              <div class="total-label">Total Amount Payable</div>
+              <div class="total-value">₹ ${formatAmount(pricing.grandTotal)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="terms-conditions">
+          <div class="terms-title">Terms and Conditions:</div>
+          <div class="terms-content">
+            <ol class="terms-list">
+              <li>Refer our app/website for our detailed terms and policies.</li>
+              <li>Subject to Chennai Jurisdiction.</li>
+              <li>Weight tolerance of ±0.020 g per product is considered normal due to measurement fluctuations.</li>
+              <li>Any of our products sold can be verified for purity at any BIS-recognised Assaying & Hallmarking Centre.</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  // Generate PDF using Puppeteer
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
+
+  const page = await browser.newPage();
+  await page.setContent(html, { waitUntil: 'networkidle0' });
+  
+  const pdfResult = await page.pdf({
+    format: 'A4',
+    printBackground: true,
+    margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' }
+  });
+
+  await browser.close();
+  
+  // Ensure we return a proper Buffer (Puppeteer might return Uint8Array in some versions)
+  const pdfBuffer = Buffer.from(pdfResult);
+  console.log('📄 PDF generated, size:', pdfBuffer.length, 'bytes');
+  
+  return pdfBuffer;
+}
+
+// Helper function to generate Investment Invoice PDF (for Gold/Silver Buy/Sell)
+async function generateInvestmentInvoicePDF(invoiceData) {
+  const {
+    invoiceNumber,
+    orderId,
+    orderType, // 'buy' or 'sell'
+    transactionType, // 'GOLD' or 'SILVER'
+    customerName,
+    customerEmail,
+    customerPhone,
+    quantity,
+    ratePerGram,
+    baseAmount,
+    gstRate,
+    gstAmount,
+    totalAmount,
+    paymentMethod,
+    newBalance,
+    newINRBalance,
+    createdAt
+  } = invoiceData;
+
+  const formatAmount = (amount) => parseFloat(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  
+  const formatDate = (date) =>
+    new Date(date || new Date()).toLocaleDateString('en-IN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+
+  const isBuy = orderType === 'buy';
+  // const metalColor = '#d9be8c';
+  const metalColor = '#E9BE8C'
+// #d9be8c';
+  const productName = transactionType === 'GOLD' ? 'GOLD24' : 'SILVER';
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Investment Invoice ${invoiceNumber}</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Arial', sans-serif; font-size: 12px; line-height: 1.5; color: #333; background: white; }
+        .invoice-container { max-width: 1200px; margin: 0 auto; background: white; }
+        
+        /* Header */
+        .header { text-align: center; padding: 30px 20px 20px; }
+        .logo { width: 70px; margin-bottom: 10px; }
+        .company-name { font-size: 24px; font-weight: bold; color: #333; margin-bottom: 5px; }
+        .company-tagline { font-size: 12px; color: #666; margin-bottom: 15px; }
+        
+        /* Invoice Title Bar */
+        .invoice-title-bar { background: ${metalColor}; padding: 10px 20px; margin: 0 20px; }
+        .invoice-title { font-size: 18px; font-weight: bold; color: #333; }
+        
+        /* Details Section - 3 columns */
+        .details-section { display: flex; justify-content: space-between; padding: 20px 15px; gap: 10px; }
+        .details-box { flex: 1; }
+        .details-box h4 { color: ${metalColor}; margin-bottom: 12px; font-size: 13px; font-weight: bold; }
+        .details-row { margin-bottom: 6px; font-size: 11px; }
+        .details-label { color: #333; font-weight: normal; }
+        .company-info { font-size: 11px; line-height: 1.6; }
+        .company-info strong { font-size: 12px; display: block; margin-bottom: 5px; }
+        
+        /* Transaction Table */
+        .table-container { padding: 0 20px; margin-bottom: 10px; }
+        .transaction-table { width: 100%; border-collapse: collapse; }
+        .transaction-table th { 
+          background: ${metalColor}; 
+          color: #333; 
+          padding: 12px 15px; 
+          text-align: left; 
+          font-size: 12px; 
+          font-weight: bold;
+        }
+        .transaction-table th:last-child { text-align: right; }
+        .transaction-table td { 
+          padding: 12px 15px; 
+          border-bottom: 1px solid #eee; 
+          font-size: 12px; 
+        }
+        .transaction-table td:last-child { text-align: right; }
+        .transaction-table .total-row { background: ${metalColor}; }
+        .transaction-table .total-row td { 
+          font-weight: bold; 
+          font-size: 14px;
+          color: #333;
+        }
+        
+        /* Transaction Details Box */
+        .transaction-details-box { 
+          margin: 20px; 
+          padding: 15px 20px; 
+          background: #fafafa; 
+          border-left: 4px solid ${metalColor};
+        }
+        .transaction-details-box h4 { color: ${metalColor}; margin-bottom: 10px; font-size: 13px; }
+        .transaction-details-box p { margin-bottom: 5px; font-size: 11px; }
+        
+        /* Declaration Box */
+        .declaration-box { 
+          margin: 0 20px 20px; 
+          padding: 15px 20px; 
+          background: #fafafa; 
+          border-left: 4px solid ${metalColor};
+        }
+        .declaration-box h4 { color: ${metalColor}; margin-bottom: 10px; font-size: 13px; }
+        .declaration-list { margin-left: 20px; font-size: 11px; color: #555; }
+        .declaration-list li { margin-bottom: 8px; line-height: 1.5; }
+        
+        /* Signature Section */
+        .signature-section { 
+          text-align: right; 
+          padding: 20px 40px; 
+          margin-top: 20px;
+        }
+        .signature-line { 
+          border-top: 1px solid #333; 
+          width: 200px; 
+          margin-left: auto; 
+          padding-top: 10px;
+        }
+        .signature-text { font-weight: bold; font-size: 12px; }
+        .signature-company { font-size: 11px; color: #666; }
+        
+        /* Footer */
+        .footer { 
+          text-align: center; 
+          padding: 20px; 
+          background: #f5f5f5; 
+          margin-top: 30px;
+        }
+        .footer-thanks { font-weight: bold; color: #333; margin-bottom: 5px; }
+        .footer-contact { font-size: 11px; color: #666; margin-bottom: 5px; }
+        .footer-note { font-size: 10px; color: #999; }
+      </style>
+    </head>
+    <body>
+      <div class="invoice-container">
+        <!-- Header -->
+        <div class="header">
+          ${logoBase64 ? `<img src="data:image/png;base64,${logoBase64}" class="logo"/>` : `<div style="font-size: 40px; font-weight: bold; color: ${metalColor}; font-family: Georgia, serif;">PG</div>`}
+          <div class="company-name">Precious Goldsmith</div>
+          <div class="company-tagline">Digital Gold & Silver Investment Platform</div>
+        </div>
+
+        <!-- Invoice Title Bar -->
+        <div class="invoice-title-bar">
+          <div class="invoice-title">Invoice Statement - ${isBuy ? 'BUY' : 'SELL'} Order</div>
+        </div>
+
+        <!-- Details Section - 3 columns -->
+        <div class="details-section">
+          <div class="details-box">
+            <h4>Customer Details</h4>
+            <div class="details-row"><span class="details-label">${customerName}</span></div>
+            <div class="details-row"><span class="details-label">${customerEmail}</span></div>
+            <div class="details-row"><span class="details-label">${customerPhone}</span></div>
+            <div class="details-row"><span class="details-label">${isBuy ? 'DEPOSIT' : 'WITHDRAWAL'}</span></div>
+          </div>
+          <div class="details-box">
+            <h4>Invoice Details</h4>
+            <div class="details-row">Invoice No: ${invoiceNumber}</div>
+            <div class="details-row">Order ID: ${orderId}</div>
+            <div class="details-row">Date: ${formatDate(createdAt)}</div>
+            <div class="details-row">Product: ${productName}</div>
+          </div>
+          <div class="details-box">
+            <h4>Company</h4>
+            <div class="company-info">
+              <strong>KSAN Industries LLP</strong>
+              New No:46, Old No:70/1, Bazullah Road,<br>
+              T Nagar, Chennai - 600017<br>
+              GSTIN: 33ABAFK98176AIZK<br>
+              PAN: ABAFK9817G<br>
+              CIN: AAP-8899<br>
+              support@preciousgoldsmith.com
+            </div>
+          </div>
+        </div>
+
+        <!-- Transaction Table -->
+        <div class="table-container">
+          <table class="transaction-table">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th>Qty(g)</th>
+                <th>Rate/g(₹)</th>
+                <th>Amount(₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>${productName}</td>
+                <td>${quantity}</td>
+                <td>${formatAmount(ratePerGram)}</td>
+                <td>${formatAmount(baseAmount)}</td>
+              </tr>
+              <tr>
+                <td colspan="3">GST(${isBuy ? gstRate || 3 : 0}%)</td>
+                <td>${isBuy ? formatAmount(gstAmount) : '0.00'}</td>
+              </tr>
+              <tr class="total-row">
+                <td colspan="3">Total</td>
+                <td>₹${formatAmount(totalAmount)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Transaction Details Box -->
+        <div class="transaction-details-box">
+          <h4>Transaction Details</h4>
+          <p><strong>ID:</strong> ${orderId}</p>
+          <p><strong>Mode:</strong> ${paymentMethod || 'Online Payment'}</p>
+          ${newBalance !== undefined ? `<p><strong>Updated ${transactionType} Balance:</strong> ${newBalance} grams</p>` : ''}
+          ${!isBuy && newINRBalance !== undefined ? `<p><strong>INR Wallet Balance:</strong> ₹${formatAmount(newINRBalance)}</p>` : ''}
+        </div>
+
+        <!-- Declaration Box -->
+        <div class="declaration-box">
+          <h4>Declaration:</h4>
+          <ul class="declaration-list">
+            <li>We declare that the above quantity of goods are kept by the seller in a secure vault and the same is insured by the seller. The seller shall be liable to pay the customer the value of the goods in case of any loss or damage to the goods.</li>
+            <li>It can be delivered in a form of a minted coin upon request as per the Terms and Conditions.</li>
+            ${isBuy ? '<li>GST has been charged as per applicable government regulations.</li>' : '<li>No GST is applicable on sale of digital gold/silver.</li>'}
+          </ul>
+        </div>
+        <!-- Footer -->
+        <div class="footer">
+          <div class="footer-thanks">Thank you for choosing Precious Goldsmith</div>
+          <div class="footer-contact">For queries: support@preciousgoldsmith.com</div>
+          <div class="footer-note">This is a computer-generated invoice. No signature required.</div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  // Generate PDF using Puppeteer
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
+
+  const page = await browser.newPage();
+  await page.setContent(html, { waitUntil: 'networkidle0' });
+  
+  const pdfResult = await page.pdf({
+    format: 'A4',
+    printBackground: true,
+    margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' }
+  });
+
+  await browser.close();
+  
+  const pdfBuffer = Buffer.from(pdfResult);
+  console.log('📄 Investment Invoice PDF generated, size:', pdfBuffer.length, 'bytes');
+  
+  return pdfBuffer;
+}
 
 
 async function fetchLiveGoldPriceINR() {
@@ -113,6 +752,7 @@ const buyOrSellGold = async (req, res) => {
       });
 
       // Create invoice for this order
+      let invoiceNumber = `INV-BUY-${Date.now()}`;
       try {
         console.log(`🔄 Attempting to create invoice for order: ${orderId}`);
         console.log(`User details - Name: ${user.name}, Email: ${user.email}, Phone: ${user.phone}`);
@@ -140,11 +780,116 @@ const buyOrSellGold = async (req, res) => {
         console.log('Invoice data:', JSON.stringify(invoiceData, null, 2));
 
         const invoice = await InvestmentInvoice.create(invoiceData);
+        invoiceNumber = invoice.invoiceNumber;
         console.log(`✅ Invoice created successfully: ${invoice.invoiceNumber} for order: ${orderId}`);
       } catch (invoiceError) {
         console.error(`❌ Error creating invoice for order ${orderId}:`, invoiceError.message);
         console.error('Full error:', invoiceError);
         // Don't fail the order if invoice creation fails
+      }
+
+      // Send confirmation email with Investment Invoice PDF
+      try {
+        console.log('📧 Generating investment invoice PDF for BUY order:', orderId);
+        
+        // Generate Investment Invoice PDF
+        const pdfBuffer = await generateInvestmentInvoicePDF({
+          invoiceNumber,
+          orderId,
+          orderType: 'buy',
+          transactionType: transactionType.toUpperCase(),
+          customerName: user.name || 'Customer',
+          customerEmail: user.email || 'noemail@example.com',
+          customerPhone: user.phone || '0000000000',
+          quantity: parseFloat(goldQty),
+          ratePerGram: parseFloat(goldPrice),
+          baseAmount: parseFloat(inrAmount) - parseFloat(gstAmount),
+          gstRate: 3,
+          gstAmount: parseFloat(gstAmount),
+          totalAmount: parseFloat(inrAmount),
+          paymentMethod: Payment_method,
+          newBalance: newGoldBalance,
+          createdAt: new Date()
+        });
+
+        const emailSubject = `${transactionType.toUpperCase()} Purchase Confirmation - Order #${orderId}`;
+        const emailHtml = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+            <div style="background: linear-gradient(135deg, #D4AF37 0%, #F4E4BC 100%); padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+              <h1 style="color: #1a1a1a; margin: 0;">Purchase Successful!</h1>
+            </div>
+            <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+              <p style="font-size: 16px; color: #333;">Dear <strong>${user.name || 'Valued Customer'}</strong>,</p>
+              <p style="font-size: 16px; color: #333;">Your ${transactionType.toUpperCase()} purchase has been completed successfully.</p>
+              
+              <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #D4AF37; margin-top: 0; border-bottom: 2px solid #D4AF37; padding-bottom: 10px;">Transaction Details</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 10px 0; color: #666; border-bottom: 1px solid #eee;">Order ID:</td>
+                    <td style="padding: 10px 0; color: #333; font-weight: bold; text-align: right; border-bottom: 1px solid #eee;">${orderId}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #666; border-bottom: 1px solid #eee;">Invoice Number:</td>
+                    <td style="padding: 10px 0; color: #333; font-weight: bold; text-align: right; border-bottom: 1px solid #eee;">${invoiceNumber}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #666; border-bottom: 1px solid #eee;">Transaction Type:</td>
+                    <td style="padding: 10px 0; color: #333; font-weight: bold; text-align: right; border-bottom: 1px solid #eee;">BUY ${transactionType.toUpperCase()}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #666; border-bottom: 1px solid #eee;">Quantity:</td>
+                    <td style="padding: 10px 0; color: #333; font-weight: bold; text-align: right; border-bottom: 1px solid #eee;">${goldQty} grams</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #666; border-bottom: 1px solid #eee;">${transactionType.toUpperCase()} Price (per gram):</td>
+                    <td style="padding: 10px 0; color: #333; font-weight: bold; text-align: right; border-bottom: 1px solid #eee;">₹${parseFloat(goldPrice).toLocaleString('en-IN')}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #666; border-bottom: 1px solid #eee;">GST (3%):</td>
+                    <td style="padding: 10px 0; color: #333; font-weight: bold; text-align: right; border-bottom: 1px solid #eee;">₹${parseFloat(gstAmount).toLocaleString('en-IN')}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #666; border-bottom: 1px solid #eee;">Payment Method:</td>
+                    <td style="padding: 10px 0; color: #333; font-weight: bold; text-align: right; border-bottom: 1px solid #eee;">${Payment_method}</td>
+                  </tr>
+                  <tr style="background-color: #D4AF37;">
+                    <td style="padding: 15px 10px; color: #1a1a1a; font-weight: bold; font-size: 18px;">Total Amount Paid:</td>
+                    <td style="padding: 15px 10px; color: #1a1a1a; font-weight: bold; text-align: right; font-size: 18px;">₹${parseFloat(inrAmount).toLocaleString('en-IN')}</td>
+                  </tr>
+                </table>
+              </div>
+              
+              <div style="background-color: #e8f5e9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 0; color: #2e7d32; font-weight: bold;">✓ Your updated ${transactionType.toUpperCase()} balance: ${newGoldBalance} grams</p>
+              </div>
+
+              <div style="background-color: #e3f2fd; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center;">
+                <p style="margin: 0; color: #1565c0;">📎 <strong>Your investment invoice is attached to this email as a PDF.</strong></p>
+              </div>
+              
+              <p style="font-size: 14px; color: #666; margin-top: 20px;">Thank you for investing with Precious Goldsmith. Your digital ${transactionType.toLowerCase()} is securely stored in your account.</p>
+              
+              <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+                <p style="font-size: 12px; color: #999;">This is an automated email. Please do not reply.</p>
+                <p style="font-size: 12px; color: #999;">© ${new Date().getFullYear()} Precious Goldsmith. All rights reserved.</p>
+              </div>
+            </div>
+          </div>
+        `;
+        
+        await sendEmailWithAttachment(
+          user.email,
+          emailSubject,
+          emailHtml,
+          user.name || 'Customer',
+          pdfBuffer,
+          `Investment-Invoice-${invoiceNumber}.pdf`
+        );
+        console.log(`✅ Purchase confirmation email with invoice PDF sent to ${user.email}`);
+      } catch (emailError) {
+        console.error(`❌ Error sending purchase confirmation email:`, emailError.message);
+        // Don't fail the order if email fails
       }
 
       return res.status(201).json({
@@ -185,6 +930,7 @@ const buyOrSellGold = async (req, res) => {
       });
 
       // Create invoice for this order
+      let invoiceNumberSell = `INV-SELL-${Date.now()}`;
       try {
         console.log(`🔄 Attempting to create invoice for SELL order: ${orderId}`);
         console.log(`User details - Name: ${user.name}, Email: ${user.email}, Phone: ${user.phone}`);
@@ -202,7 +948,7 @@ const buyOrSellGold = async (req, res) => {
           ratePerGram: parseFloat(goldPrice),
           amount: receivedAmount,
           gstRate: 0,
-          gstAmount: 0,
+          gstAmount: parseFloat(gstAmount),
           totalInvoiceValue: receivedAmount,
           paymentMethod: Payment_method,
           transactionId: orderId,
@@ -212,11 +958,115 @@ const buyOrSellGold = async (req, res) => {
         console.log('Invoice data:', JSON.stringify(invoiceData, null, 2));
 
         const invoice = await InvestmentInvoice.create(invoiceData);
+        invoiceNumberSell = invoice.invoiceNumber;
         console.log(`✅ Invoice created successfully: ${invoice.invoiceNumber} for SELL order: ${orderId}`);
       } catch (invoiceError) {
         console.error(`❌ Error creating invoice for SELL order ${orderId}:`, invoiceError.message);
         console.error('Full error:', invoiceError);
         // Don't fail the order if invoice creation fails
+      }
+
+      // Send confirmation email with Investment Invoice PDF
+      try {
+        console.log('📧 Generating investment invoice PDF for SELL order:', orderId);
+        
+        // Generate Investment Invoice PDF
+        const pdfBuffer = await generateInvestmentInvoicePDF({
+          invoiceNumber: invoiceNumberSell,
+          orderId,
+          orderType: 'sell',
+          transactionType: transactionType.toUpperCase(),
+          customerName: user.name || 'Customer',
+          customerEmail: user.email || 'noemail@example.com',
+          customerPhone: user.phone || '0000000000',
+          quantity: parseFloat(goldQty),
+          ratePerGram: parseFloat(goldPrice),
+          baseAmount: parseFloat(goldQty) * parseFloat(goldPrice),
+          gstRate: 0,
+          gstAmount: parseFloat(gstAmount),
+          totalAmount: receivedAmount,
+          paymentMethod: Payment_method,
+          newBalance: newGoldBalance,
+          newINRBalance: newINRBalance,
+          createdAt: new Date()
+        });
+
+        const emailSubject = `${transactionType.toUpperCase()} Sale Confirmation - Order #${orderId}`;
+        const emailHtml = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+            <div style="background: linear-gradient(135deg, #D4AF37 0%, #F4E4BC 100%); padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+              <h1 style="color: #1a1a1a; margin: 0;">Sale Successful!</h1>
+            </div>
+            <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+              <p style="font-size: 16px; color: #333;">Dear <strong>${user.name || 'Valued Customer'}</strong>,</p>
+              <p style="font-size: 16px; color: #333;">Your ${transactionType.toUpperCase()} sale has been completed successfully.</p>
+              
+              <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #D4AF37; margin-top: 0; border-bottom: 2px solid #D4AF37; padding-bottom: 10px;">Transaction Details</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 10px 0; color: #666; border-bottom: 1px solid #eee;">Order ID:</td>
+                    <td style="padding: 10px 0; color: #333; font-weight: bold; text-align: right; border-bottom: 1px solid #eee;">${orderId}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #666; border-bottom: 1px solid #eee;">Invoice Number:</td>
+                    <td style="padding: 10px 0; color: #333; font-weight: bold; text-align: right; border-bottom: 1px solid #eee;">${invoiceNumberSell}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #666; border-bottom: 1px solid #eee;">Transaction Type:</td>
+                    <td style="padding: 10px 0; color: #333; font-weight: bold; text-align: right; border-bottom: 1px solid #eee;">SELL ${transactionType.toUpperCase()}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #666; border-bottom: 1px solid #eee;">Quantity Sold:</td>
+                    <td style="padding: 10px 0; color: #333; font-weight: bold; text-align: right; border-bottom: 1px solid #eee;">${goldQty} grams</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #666; border-bottom: 1px solid #eee;">${transactionType.toUpperCase()} Price (per gram):</td>
+                    <td style="padding: 10px 0; color: #333; font-weight: bold; text-align: right; border-bottom: 1px solid #eee;">₹${parseFloat(goldPrice).toLocaleString('en-IN')}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #666; border-bottom: 1px solid #eee;">GST Deducted:</td>
+                    <td style="padding: 10px 0; color: #333; font-weight: bold; text-align: right; border-bottom: 1px solid #eee;">₹${parseFloat(gstAmount).toLocaleString('en-IN')}</td>
+                  </tr>
+                  <tr style="background-color: #4CAF50;">
+                    <td style="padding: 15px 10px; color: #ffffff; font-weight: bold; font-size: 18px;">Amount Received:</td>
+                    <td style="padding: 15px 10px; color: #ffffff; font-weight: bold; text-align: right; font-size: 18px;">₹${parseFloat(receivedAmount).toLocaleString('en-IN')}</td>
+                  </tr>
+                </table>
+              </div>
+              
+              <div style="background-color: #fff3e0; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 0 0 10px 0; color: #e65100; font-weight: bold;">📊 Your Updated Balances:</p>
+                <p style="margin: 5px 0; color: #333;">• ${transactionType.toUpperCase()} Balance: <strong>${newGoldBalance} grams</strong></p>
+                <p style="margin: 5px 0; color: #333;">• INR Wallet Balance: <strong>₹${newINRBalance.toLocaleString('en-IN')}</strong></p>
+              </div>
+
+              <div style="background-color: #e3f2fd; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center;">
+                <p style="margin: 0; color: #1565c0;">📎 <strong>Your investment invoice is attached to this email as a PDF.</strong></p>
+              </div>
+              
+              <p style="font-size: 14px; color: #666; margin-top: 20px;">Thank you for using Precious Goldsmith. The amount has been credited to your INR wallet.</p>
+              
+              <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+                <p style="font-size: 12px; color: #999;">This is an automated email. Please do not reply.</p>
+                <p style="font-size: 12px; color: #999;">© ${new Date().getFullYear()} Precious Goldsmith. All rights reserved.</p>
+              </div>
+            </div>
+          </div>
+        `;
+        
+        await sendEmailWithAttachment(
+          user.email,
+          emailSubject,
+          emailHtml,
+          user.name || 'Customer',
+          pdfBuffer,
+          `Investment-Invoice-${invoiceNumberSell}.pdf`
+        );
+        console.log(`✅ Sale confirmation email with invoice PDF sent to ${user.email}`);
+      } catch (emailError) {
+        console.error(`❌ Error sending sale confirmation email:`, emailError.message);
+        // Don't fail the order if email fails
       }
 
       return res.status(201).json({
@@ -227,7 +1077,6 @@ const buyOrSellGold = async (req, res) => {
         createdAt: Date.now(),
         orderId: orderId,
         Payment_method: Payment_method
-
       });
     }
 
@@ -500,6 +1349,7 @@ const placeOrder = async (req, res) => {
         };
 
         // Prepare products with detailed pricing and complete product data
+        // IMPORTANT: Use cart prices (orderItem.price) as they are FINAL prices (already include GST, making charges, discounts)
         const products = await Promise.all(items.map(async (orderItem) => {
           const product = await Product.findById(orderItem.productDataid);
           if (!product) {
@@ -510,16 +1360,17 @@ const placeOrder = async (req, res) => {
           const productDetails = product.productDetails || [];
           const priceDetails = product.priceDetails || [];
 
-          // Get weight from product details or price details
+          // Get weight and purity from product details
           let weight = 0;
           let purity = '22Karat';
           let metalType = 'gold';
 
-          // Extract weight and purity from product details
+          // Try to extract weight and purity from productDetails first
           productDetails.forEach(detail => {
             if (detail.type === 'Metal') {
               if (detail.attributes && detail.attributes['Gross Weight']) {
-                weight = parseFloat(detail.attributes['Gross Weight']) || 0;
+                const weightStr = String(detail.attributes['Gross Weight']).replace('g', '').trim();
+                weight = parseFloat(weightStr) || 0;
               }
               if (detail.attributes && detail.attributes.Karatage) {
                 purity = detail.attributes.Karatage;
@@ -530,46 +1381,55 @@ const placeOrder = async (req, res) => {
             }
           });
 
-          // Calculate pricing details from priceDetails or use defaults
-          const unitPrice = product.sellingprice || 0;
-          const totalPrice = unitPrice * orderItem.quantity;
-
-          // Extract making charges, GST, and discount from priceDetails
-          let makingCharges = 0;
-          let gst = 0;
-          let discount = 0;
+          // Extract GST, Discount, and Weight from priceDetails
+          let gstValue = 0;
+          let gstPercentage = 0;
+          let discountValue = 0;
+          let discountPercentage = 0;
+          let makingChargesValue = 0;
+          let goldValue = 0;
 
           priceDetails.forEach(price => {
-            if (price.name === 'Making Charges') {
-              makingCharges = (parseFloat(price.value) || 0) * orderItem.quantity;
-            } else if (price.name === 'GST') {
-              gst = (parseFloat(price.value) || 0) * orderItem.quantity;
+            if (price.name === 'GST') {
+              gstValue = parseFloat(price.value) || 0;
+              // Extract percentage from weight field if available (e.g., "2.97%" or "3%")
+              if (price.weight && String(price.weight).includes('%')) {
+                gstPercentage = parseFloat(String(price.weight).replace('%', '')) || 0;
+              }
             } else if (price.name === 'Discount') {
-              discount = (parseFloat(price.value) || 0) * orderItem.quantity;
+              discountValue = parseFloat(price.value) || 0;
+              if (price.weight && String(price.weight).includes('%')) {
+                discountPercentage = parseFloat(String(price.weight).replace('%', '')) || 0;
+              }
+            } else if (price.name === 'Making Charges') {
+              makingChargesValue = parseFloat(price.value) || 0;
+            } else if (price.name === 'Gold' || price.name === 'Silver') {
+              goldValue += parseFloat(price.value) || 0; // Add up gold and silver values
+            } else if (price.name === 'Sub Total') {
+              // Extract weight from Sub Total row - format: "5.900g Gross Wt." or "8.000g Gross Wt."
+              if (price.weight && weight === 0) {
+                const weightMatch = String(price.weight).match(/(\d+\.?\d*)\s*g/i);
+                if (weightMatch) {
+                  weight = parseFloat(weightMatch[1]) || 0;
+                  console.log(`📦 Extracted weight from Sub Total: ${weight}g for product: ${product.name}`);
+                }
+              }
             }
           });
-
-          // If no making charges found in priceDetails, calculate from percentage
-          if (makingCharges === 0) {
-            const goldValue = priceDetails.find(p => p.name === 'Gold')?.value || 0;
-            const makingChargesPercentage = priceDetails.find(p => p.name === 'Making Charges')?.weight;
-            if (makingChargesPercentage && makingChargesPercentage.includes('%')) {
-              const percentage = parseFloat(makingChargesPercentage.replace('%', '')) / 100;
-              makingCharges = (goldValue * percentage) * orderItem.quantity;
-            }
+          
+          // If still no weight, try to get from product's direct weight field
+          if (weight === 0 && product.weight) {
+            weight = parseFloat(product.weight) || 0;
           }
 
-          // If no GST found in priceDetails, use the product's GST field
-          if (gst === 0 && product.gst) {
-            gst = (totalPrice * product.gst / 100) * orderItem.quantity;
-          }
-
-          // If no discount found in priceDetails, use the product's Discount field
-          if (discount === 0 && product.Discount) {
-            discount = (totalPrice * product.Discount / 100) * orderItem.quantity;
-          }
-
-          const finalPrice = totalPrice + makingCharges + gst - discount;
+          // Use the cart price as the FINAL price (it already includes GST, making charges, discounts)
+          const cartItemPrice = orderItem.price || 0;
+          const finalPrice = cartItemPrice * orderItem.quantity;
+          
+          // For display - multiply by quantity
+          const gst = gstValue * orderItem.quantity;
+          const discount = discountValue * orderItem.quantity;
+          const makingCharges = makingChargesValue * orderItem.quantity;
 
           return {
             productId: product._id,
@@ -578,14 +1438,18 @@ const placeOrder = async (req, res) => {
             category: product.categories || 'N/A',
             brand: product.brand || 'N/A',
             quantity: orderItem.quantity,
-            unitPrice,
-            totalPrice,
-            weight: weight,
+            unitPrice: cartItemPrice,
+            totalPrice: finalPrice,
+            weight: weight * orderItem.quantity, // Total weight for quantity
+            weightPerUnit: weight, // Weight per single unit
             metalType: metalType,
             purity: purity,
             makingCharges,
             gst,
+            gstPercentage,
             discount,
+            discountPercentage,
+            goldValue: goldValue * orderItem.quantity,
             finalPrice,
             // Store complete product details for invoice
             productDetails: productDetails,
@@ -596,12 +1460,15 @@ const placeOrder = async (req, res) => {
           };
         }));
 
-        // Calculate totals
-        const subtotal = products.reduce((sum, product) => sum + product.totalPrice, 0);
-        const totalMakingCharges = products.reduce((sum, product) => sum + product.makingCharges, 0);
-        const totalGST = products.reduce((sum, product) => sum + product.gst, 0);
-        const totalDiscount = products.reduce((sum, product) => sum + product.discount, 0);
-        const grandTotal = subtotal + totalMakingCharges + totalGST - totalDiscount;
+        // Use the cart's totalAmount as the grand total - this is what customer agreed to pay
+        const grandTotal = totalAmount;
+        
+        // Calculate totals for display from extracted values
+        const totalWeight = products.reduce((sum, p) => sum + (p.weight || 0), 0);
+        const totalGST = products.reduce((sum, p) => sum + (p.gst || 0), 0);
+        const totalDiscount = products.reduce((sum, p) => sum + (p.discount || 0), 0);
+        const totalMakingCharges = products.reduce((sum, p) => sum + (p.makingCharges || 0), 0);
+        const subtotal = products.reduce((sum, p) => sum + (p.goldValue || 0), 0);
 
         // Generate invoice number
         const invoiceCount = await Invoice.countDocuments();
@@ -642,6 +1509,37 @@ const placeOrder = async (req, res) => {
 
         await invoice.save();
         console.log('Invoice created automatically for order:', order._id);
+
+        // Send order confirmation email with invoice PDF
+        try {
+          console.log('📧 Starting email with invoice PDF for order:', order.orderCode);
+          
+          // Generate invoice PDF
+          const pdfBuffer = await generateOrderInvoicePDF(invoice, customerDetails, products, {
+            subtotal, totalMakingCharges, totalGST, totalDiscount, grandTotal
+          });
+          
+          // Prepare email content
+          const emailSubject = `Order Confirmation - ${order.orderCode} | Precious Goldsmith`;
+          const emailHtml = generateOrderConfirmationEmailHTML(order, customer, products, {
+            subtotal, totalMakingCharges, totalGST, totalDiscount, grandTotal
+          }, invoice.invoiceNumber);
+          
+          // Send email with PDF attachment
+          await sendEmailWithAttachment(
+            customer.email,
+            emailSubject,
+            emailHtml,
+            customer.name || 'Valued Customer',
+            pdfBuffer,
+            `Invoice-${invoice.invoiceNumber}.pdf`
+          );
+          
+          console.log(`✅ Order confirmation email with invoice sent to ${customer.email}`);
+        } catch (emailError) {
+          console.error('❌ Error sending order confirmation email:', emailError.message);
+          // Don't fail the order if email fails
+        }
       }
     } catch (invoiceError) {
       console.error('Error creating automatic invoice:', invoiceError);

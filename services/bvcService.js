@@ -59,7 +59,9 @@ class BVCService {
       } = orderData;
 
       // Generate unique AWB number (8 characters max)
-      const awbNo = `PG${Date.now()}`.slice(0, 8);
+      const awbNo = function random8() {
+  return Math.floor(10000000 + Math.random() * 90000000);
+};
 
       // Build order payload
       const orderPayload = {
@@ -67,7 +69,7 @@ class BVCService {
         AgentID: this.agentId,
         ProductCode: items?.[0]?.productCode || "Gold Asset",
         ItemName: items?.[0]?.productName || "Asset Purchase",
-        AWBNo: awbNo,
+        AWBNo: awbNo(),
         No_Of_Pieces: packageCount,
         CustomerName: customerName,
         CustomerAdd1: deliveryAddress?.addressLine1 || deliveryAddress?.street || "N/A",

@@ -32,10 +32,10 @@ router.route("/removecart").post(isAuth,removeFromCart);
 router.route("/decrementcart").post(isAuth,decrementCartItem);
 
 router.route("/createCategory").post(isAuth,createCategory);
-router.route("/getAllCategories").get(isAuth,getAllCategories);
+router.route("/getAllCategories").get(getAllCategories);
 router.route("/getCategoryById/:id").get(getCategoryById);
 router.delete('/deleteCategory/:id', deleteCategory);
-router.route("/categories/:id/products").get(isAuth,getCategoryWithProducts);
+router.route("/categories/:id/products").get(getCategoryWithProducts);
 router.post("/cart/checkout", checkout);
 
 module.exports = router;

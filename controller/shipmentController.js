@@ -2,11 +2,41 @@ const Shipment = require("../models/shipment_model");
 const ProductOrder = require("../models/commerce_order_model");
 const User = require("../models/userModel");
 const bvcService = require("../services/bvcService");
+const mongoose = require("mongoose");
 
 /**
  * Shipment Controller
  * Handles all shipment-related operations with BVC integration
  */
+
+// Flag to track if index fix has been attempted
+let indexFixAttempted = false;
+
+/**
+ * Fix problematic trackingNumber_1 index if it exists
+ * This handles legacy index that causes duplicate key errors
+ */
+const fixTrackingNumberIndex = async () => {
+  if (indexFixAttempted) return;
+  indexFixAttempted = true;
+  
+  try {
+    const collection = mongoose.connection.db.collection('shipments');
+    const indexes = await collection.indexes();
+    const hasProblematicIndex = indexes.some(idx => idx.name === 'trackingNumber_1');
+    
+    if (hasProblematicIndex) {
+      console.log('⚠️  Found problematic trackingNumber_1 index, dropping...');
+      await collection.dropIndex('trackingNumber_1');
+      console.log('✅ Successfully dropped trackingNumber_1 index');
+    }
+  } catch (error) {
+    // Index might not exist, which is fine
+    if (!error.message.includes('index not found')) {
+      console.warn('Warning fixing index:', error.message);
+    }
+  }
+};
 
 /**
  * Create a new shipment for an order
@@ -14,6 +44,9 @@ const bvcService = require("../services/bvcService");
  */
 const createShipment = async (req, res) => {
   try {
+    // Fix problematic index on first call
+    await fixTrackingNumberIndex();
+    
     const { orderCode } = req.body;
     const userId = req.user?.id || req.user?.user?.id;
 
@@ -155,6 +188,27 @@ const createShipment = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Create Shipment Error:", error);
+    
+    // Handle duplicate key error (legacy trackingNumber index)
+    if (error.code === 11000 && error.message.includes('trackingNumber')) {
+      console.log('⚠️  Duplicate key error detected, attempting to fix index...');
+      
+      try {
+        // Force fix the index
+        indexFixAttempted = false;
+        await fixTrackingNumberIndex();
+        
+        // Return a more helpful error
+        return res.status(409).json({
+          success: false,
+          error: "Database index conflict detected. Please retry the operation.",
+          retryable: true,
+        });
+      } catch (fixError) {
+        console.error('Failed to fix index:', fixError);
+      }
+    }
+    
     res.status(500).json({
       success: false,
       error: error.message,

@@ -3,8 +3,6 @@ const asyncHandler = require("express-async-handler");
 const helper = require("../helpers/helpers");
 const multer = require("multer");
 const { generateToken, hashValue, compareValue, isEmail } = require("../helpers/helpers");
-// const User = require("../models/userModel");
-// const adminModel = require("../models/admin_model");
 const userModel = require("../models/userModel");
 const bcrypt = require("bcryptjs");
 const { sendMail, sendEmail } = require("../helpers/mailer");
@@ -12,6 +10,32 @@ const crypto = require("crypto");
 const { default: axios } = require("axios");
 const dotenv = require("dotenv").config();
 const twilio = require("twilio");
+const fs = require("fs");
+
+// Function to load logo for email templates
+// const getLogoBase64 = () => {
+//   try {
+//     const logoPath = path.join(__dirname, '..', 'public', 'logo', '23.png');
+//     console.log('Loading logo from:', logoPath);
+//     if (fs.existsSync(logoPath)) {
+//       const logoBuffer = fs.readFileSync(logoPath);
+//       console.log('Logo loaded successfully, size:', logoBuffer.length, 'bytes');
+//       return logoBuffer.toString('base64');
+//     } else {
+//       console.error('Logo file not found at:', logoPath);
+//       return '';
+//     }
+//   } catch (err) {
+//     console.error('Failed to load logo for email:', err.message);
+//     return '';
+//   }
+// };
+let logoBase64 = '';
+try {
+  logoBase64 = fs.readFileSync("public/logo/23.png").toString("base64");
+} catch (err) {
+  console.log('Logo file not found, using default');
+}
 
 const client = twilio(
   process.env.TWILIO_ACCOUNT_SID,
@@ -42,16 +66,148 @@ const signUpRequest = asyncHandler(async (req, res) => {
 
       console.log(email, otp, referralCode, appId);
 
+      // Load logo for email
+      const logoBase64 = getLogoBase64();
+      const logoHtml = logoBase64 
+        ? `<img src="data:image/png;base64,${logoBase64}" alt="Precious Goldsmith" style="width: 80px; height: auto; margin-bottom: 15px;" />`
+        : `<div style="font-size: 48px; font-weight: bold; color: #333; font-family: Georgia, serif; margin-bottom: 10px;">PG</div>`;
+
       const htmlContent = `
-      <h2>Account activation Code</h2>
-      <p>Dear ${name || "User"},</p>
-      <p>Your OTP for password reset is: <strong>${otp}</strong></p>
-      <p>This code will expire in 10 minutes.</p>
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Welcome to Precious Goldsmith</title>
+      </head>
+      <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+        <table role="presentation" style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td align="center" style="padding: 40px 0;">
+              <table role="presentation" style="width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);">
+                
+                <!-- Header with Gold Gradient -->
+                <tr>
+                  <td style="background: linear-gradient(135deg, #E9BE8C 0%, #d4a574 100%); padding: 40px 30px; text-align: center;">
+          ${logoBase64 ? `<img src="data:image/png;base64,${logoBase64}" class="logo"/>` : '<div class="logo" style="font-size: 24px; font-weight: bold; color: #D4AF37;">PG</div>'}
+                    <h1 style="margin: 0; color: #333; font-size: 28px; font-weight: bold;">Precious Goldsmith</h1>
+                    <p style="margin: 10px 0 0; color: #555; font-size: 14px;">Digital Gold & Silver Investment Platform</p>
+                  </td>
+                </tr>
+
+                <!-- Welcome Banner -->
+                <tr>
+                  <td style="background-color: #333; padding: 25px 30px; text-align: center;">
+                    <h2 style="margin: 0; color: #E9BE8C; font-size: 24px; font-weight: normal;">Welcome to the Precious Goldsmith Family!</h2>
+                  </td>
+                </tr>
+
+                <!-- Main Content -->
+                <tr>
+                  <td style="padding: 40px 30px;">
+                    <p style="margin: 0 0 20px; color: #333; font-size: 18px; line-height: 1.6;">
+                      Dear <strong style="color: #d4a574;">${name || "Valued Customer"}</strong>,
+                    </p>
+                    
+                    <p style="margin: 0 0 25px; color: #555; font-size: 15px; line-height: 1.8;">
+                      We are thrilled to welcome you to the <strong>Precious Goldsmith</strong> community! You are now part of an exclusive group of smart investors who trust us for their digital gold and silver investments.
+                    </p>
+
+                    <p style="margin: 0 0 25px; color: #555; font-size: 15px; line-height: 1.8;">
+                      To complete your registration and start your golden journey with us, please verify your email using the OTP below:
+                    </p>
+
+                    <!-- OTP Box -->
+                    <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 30px 0;">
+                      <tr>
+                        <td align="center">
+                          <div style="background: linear-gradient(135deg, #f9f4ef 0%, #fff8f0 100%); border: 2px solid #E9BE8C; border-radius: 12px; padding: 30px; display: inline-block;">
+                            <p style="margin: 0 0 10px; color: #666; font-size: 14px; text-transform: uppercase; letter-spacing: 2px;">Your Verification Code</p>
+                            <div style="font-size: 42px; font-weight: bold; color: #333; letter-spacing: 12px; font-family: 'Courier New', monospace; background: #E9BE8C; padding: 15px 30px; border-radius: 8px;">
+                              ${otp}
+                            </div>
+                            <p style="margin: 15px 0 0; color: #999; font-size: 12px;">
+                              This code expires in <strong style="color: #d4a574;">10 minutes</strong>
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Benefits Section -->
+                    <div style="background: #f9f9f9; border-radius: 10px; padding: 25px; margin: 25px 0;">
+                      <h3 style="margin: 0 0 20px; color: #333; font-size: 16px; border-bottom: 2px solid #E9BE8C; padding-bottom: 10px;">
+                        Why Choose Precious Goldsmith?
+                      </h3>
+                      <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                          <td style="padding: 8px 0; color: #555; font-size: 14px;">
+                            <span style="color: #E9BE8C; margin-right: 10px;">&#10003;</span> 100% Secure and Insured Digital Gold
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 8px 0; color: #555; font-size: 14px;">
+                            <span style="color: #E9BE8C; margin-right: 10px;">&#10003;</span> Buy Gold Starting from Just Rs.1
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 8px 0; color: #555; font-size: 14px;">
+                            <span style="color: #E9BE8C; margin-right: 10px;">&#10003;</span> Convert to Physical Gold Anytime
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 8px 0; color: #555; font-size: 14px;">
+                            <span style="color: #E9BE8C; margin-right: 10px;">&#10003;</span> Real-time Market Prices
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 8px 0; color: #555; font-size: 14px;">
+                            <span style="color: #E9BE8C; margin-right: 10px;">&#10003;</span> Instant Sell and Withdraw
+                          </td>
+                        </tr>
+                      </table>
+                    </div>
+
+                    <p style="margin: 20px 0 0; color: #888; font-size: 13px; line-height: 1.6; font-style: italic;">
+                      <strong>Note:</strong> If you did not request this code, please ignore this email. Your account security is our top priority.
+                    </p>
+                  </td>
+                </tr>
+
+                <!-- Divider -->
+                <tr>
+                  <td style="padding: 0 30px;">
+                    <div style="border-top: 1px solid #eee;"></div>
+                  </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                  <td style="padding: 30px; text-align: center; background: #fafafa;">
+                    <p style="margin: 0 0 15px; color: #333; font-size: 14px; font-weight: bold;">
+                      Start Building Your Golden Future Today!
+                    </p>
+                    <p style="margin: 0 0 10px; color: #888; font-size: 12px;">
+                      Questions? Contact us at <a href="mailto:support@preciousgoldsmith.com" style="color: #d4a574; text-decoration: none;">support@preciousgoldsmith.com</a>
+                    </p>
+                    <p style="margin: 0; color: #aaa; font-size: 11px;">
+                      Precious Goldsmith | KSAN Industries LLP<br>
+                      New No:46, Old No:70/1, Bazullah Road, T Nagar, Chennai - 600017
+                    </p>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
     `;
 
       // Try to send email, but don't fail registration if email fails
       try {
-        await sendEmail(email, "Account activation Code", htmlContent, name);
+        await sendEmail(email, "Welcome to Precious Goldsmith - Verify Your Account", htmlContent, name);
         console.log('✅ Email sent successfully to:', email);
       } catch (emailError) {
         console.error('❌ Email sending failed:', emailError.message);
@@ -615,7 +771,7 @@ console.log(otp,codeHash,expiresAt);
 
   try {
     await client.messages.create({
-      body: `Your OTP is ${otp}. It expires in 5 minutes.`,
+      body: `Your OTP is ${otp}. It expires in 5 minutes. - Precious Goldsmith`,
       from: process.env.TWILIO_PHONE_NUMBER,
       to: phone.startsWith("+") ? phone : `+91${phone}`,
     });

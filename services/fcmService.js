@@ -329,12 +329,7 @@ const sendToDevice = async (notificationData, deviceToken) => {
   }
 };
 
-/**
- * Send notification to a topic
- * @param {Object} notificationData - Notification data
- * @param {String} topic - Topic name
- * @returns {Object} Result
- */
+
 const sendToTopic = async (notificationData, topic) => {
   try {
     if (!firebaseApp) {
