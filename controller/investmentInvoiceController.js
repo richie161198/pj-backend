@@ -2,16 +2,9 @@ const asyncHandler = require('express-async-handler');
 const InvestmentInvoice = require('../models/investmentInvoice_model');
 const Order = require('../models/orderModel');
 const User = require('../models/userModel');
-const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
-
-// Read logo as base64
-const logoPath = path.join(__dirname, '../public/logo/23.png');
-let logoBase64 = '';
-if (fs.existsSync(logoPath)) {
-  logoBase64 = fs.readFileSync(logoPath).toString('base64');
-}
+const { generateInvestmentInvoicePdf, logoBase64 } = require('../services/pdfService');
 
 // @desc    Create invoice for investment order
 // @route   POST /api/v0/investment-invoices/create
@@ -832,24 +825,27 @@ const downloadInvoicePDF = asyncHandler(async (req, res) => {
       });
     }
 
-    const html = generateInvestmentInvoiceHTML(invoice);
+    // Generate PDF using pdfmake
+    const pdfInvoiceData = {
+      invoiceNumber: invoice.invoiceNumber,
+      orderId: invoice.orderId,
+      orderType: invoice.orderType,
+      transactionType: invoice.transactionType,
+      customerName: invoice.userId?.name || invoice.customer?.name || 'Customer',
+      customerEmail: invoice.userId?.email || invoice.customer?.email || '',
+      customerPhone: invoice.userId?.phone || invoice.customer?.phone || '',
+      quantity: invoice.quantity,
+      ratePerGram: invoice.ratePerGram,
+      baseAmount: invoice.baseAmount,
+      gstRate: invoice.gstRate,
+      gstAmount: invoice.gstAmount,
+      totalAmount: invoice.totalAmount,
+      paymentMethod: invoice.paymentMethod,
+      newBalance: invoice.newBalance,
+      createdAt: invoice.createdAt
+    };
 
-    // Generate PDF using Puppeteer
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' },
-    });
-
-    await browser.close();
+    const pdfBuffer = await generateInvestmentInvoicePdf(pdfInvoiceData);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=invoice-${invoice.invoiceNumber}.pdf`);
@@ -878,24 +874,27 @@ const downloadInvoiceByOrderId = asyncHandler(async (req, res) => {
       });
     }
 
-    const html = generateInvestmentInvoiceHTML(invoice);
+    // Generate PDF using pdfmake
+    const pdfInvoiceData = {
+      invoiceNumber: invoice.invoiceNumber,
+      orderId: invoice.orderId,
+      orderType: invoice.orderType,
+      transactionType: invoice.transactionType,
+      customerName: invoice.userId?.name || invoice.customer?.name || 'Customer',
+      customerEmail: invoice.userId?.email || invoice.customer?.email || '',
+      customerPhone: invoice.userId?.phone || invoice.customer?.phone || '',
+      quantity: invoice.quantity,
+      ratePerGram: invoice.ratePerGram,
+      baseAmount: invoice.baseAmount,
+      gstRate: invoice.gstRate,
+      gstAmount: invoice.gstAmount,
+      totalAmount: invoice.totalAmount,
+      paymentMethod: invoice.paymentMethod,
+      newBalance: invoice.newBalance,
+      createdAt: invoice.createdAt
+    };
 
-    // Generate PDF using Puppeteer
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' },
-    });
-
-    await browser.close();
+    const pdfBuffer = await generateInvestmentInvoicePdf(pdfInvoiceData);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=invoice-${invoice.invoiceNumber}.pdf`);

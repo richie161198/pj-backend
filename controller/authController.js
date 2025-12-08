@@ -49,10 +49,16 @@ const signUpRequest = asyncHandler(async (req, res) => {
   }
   try {
     const userAvailable = await userModel.findOne({ email });
+    const isMobileExist = await userModel.findOne({ phone });
 
     if (userAvailable) {
-      res.status(400).json({ message: "User already exists" });
-    } else {
+      res.status(400).json({ message: "Email-id already exists" });
+    } 
+    else if (isMobileExist) {
+      res.status(400).json({ message: "Mobile already exists - Please try with another" });
+    } 
+    
+    else {
 
       const hashedPassword = await bcrypt.hash(password, 12);
       const referralCode = helper.referral();
@@ -65,12 +71,6 @@ const signUpRequest = asyncHandler(async (req, res) => {
 
 
       console.log(email, otp, referralCode, appId);
-
-      // Load logo for email
-      const logoBase64 = getLogoBase64();
-      const logoHtml = logoBase64 
-        ? `<img src="data:image/png;base64,${logoBase64}" alt="Precious Goldsmith" style="width: 80px; height: auto; margin-bottom: 15px;" />`
-        : `<div style="font-size: 48px; font-weight: bold; color: #333; font-family: Georgia, serif; margin-bottom: 10px;">PG</div>`;
 
       const htmlContent = `
       <!DOCTYPE html>
@@ -88,8 +88,8 @@ const signUpRequest = asyncHandler(async (req, res) => {
                 
                 <!-- Header with Gold Gradient -->
                 <tr>
-                  <td style="background: linear-gradient(135deg, #E9BE8C 0%, #d4a574 100%); padding: 40px 30px; text-align: center;">
-          ${logoBase64 ? `<img src="data:image/png;base64,${logoBase64}" class="logo"/>` : '<div class="logo" style="font-size: 24px; font-weight: bold; color: #D4AF37;">PG</div>'}
+                  <td style="background: linear-gradient(135deg, #f5f5f5 0%, #f5f5f5 100%); padding: 40px 30px; text-align: center;">
+          ${logoBase64 ? `<img src="https://res.cloudinary.com/ddfnarfsb/image/upload/v1765179970/WhatsApp_Image_2025-11-26_at_6.14.48_PM-removebg-preview_euia6w.png" alt="Precious Goldsmith" style="width: 80px; height: auto; margin-bottom: 15px;"/>` : '<div style="font-size: 48px; font-weight: bold; color: #D4AF37; margin-bottom: 15px;">PG</div>'}
                     <h1 style="margin: 0; color: #333; font-size: 28px; font-weight: bold;">Precious Goldsmith</h1>
                     <p style="margin: 10px 0 0; color: #555; font-size: 14px;">Digital Gold & Silver Investment Platform</p>
                   </td>
@@ -97,8 +97,8 @@ const signUpRequest = asyncHandler(async (req, res) => {
 
                 <!-- Welcome Banner -->
                 <tr>
-                  <td style="background-color: #333; padding: 25px 30px; text-align: center;">
-                    <h2 style="margin: 0; color: #E9BE8C; font-size: 24px; font-weight: normal;">Welcome to the Precious Goldsmith Family!</h2>
+                  <td style="background-color: #E9BE8C; padding: 25px 30px; text-align: center;">
+                    <h2 style="margin: 0; color: #f5f5f5; font-size: 24px; font-weight: normal;">Welcome to the Precious Goldsmith Family!</h2>
                   </td>
                 </tr>
 

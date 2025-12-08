@@ -18,7 +18,6 @@ const SibApiV3Sdk = require("sib-api-v3-sdk");
 const { sendEmail } = require("./helpers/mailer");
 const { generateOTP } = require("./helpers/helpers");
 const { v4: uuidv4 } = require("uuid");
-const puppeteer = require("puppeteer");
 const fs = require("fs");
 
 const logoBase64 = fs.readFileSync("public/logo/23.png").toString("base64");
@@ -870,17 +869,29 @@ const html = `
 </html>
 `;
 
-    // Launch Puppeteer & generate PDF
-    const browser = await puppeteer.launch({ headless: "new" });
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    // Generate PDF using pdfmake service
+    const { generateOrderInvoicePdf } = require('./services/pdfService');
+    
+    // Prepare invoice data for pdfmake
+    const pdfInvoiceData = {
+      invoiceNumber: invoice.orderCode,
+      orderId: invoice.orderCode,
+      customerName: invoice.customerName || 'Customer',
+      customerEmail: invoice.customerEmail || '',
+      customerPhone: invoice.customerPhone || '',
+      customerAddress: invoice.deliveryAddress || '',
+      items: invoice.items.map(item => ({
+        name: item.productDataid?.name || 'Product',
+        purity: item.productDataid?.selectedCaret || '-',
+        quantity: item.quantity || 1,
+        weight: item.productDataid?.productDetails?.[0]?.attributes?.grossWeight || '-',
+        price: item.taxableValue || item.price || 0
+      })),
+      totalAmount: invoice.totalAmount,
+      createdAt: invoice.createdAt
+    };
 
-    const pdfBuffer = await page.pdf({
-      format: "A4",
-      margin: { top: "20px", bottom: "20px" }
-    });
-
-    await browser.close();
+    const pdfBuffer = await generateOrderInvoicePdf(pdfInvoiceData);
 
     // Send PDF response
     res.set({

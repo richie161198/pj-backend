@@ -3,10 +3,8 @@ const Invoice = require('../models/invoice_model');
 const Order = require('../models/commerce_order_model');
 const User = require('../models/userModel');
 const Product = require('../models/product_model');
-const puppeteer = require('puppeteer');
 const fs = require("fs");
-
-const logoBase64 = fs.readFileSync("public/logo/23.png").toString("base64");
+const { generateOrderInvoicePdf, logoBase64 } = require('../services/pdfService');
 
 // @desc    Create invoice from order
 // @route   POST /api/v0/invoices/create-from-order
@@ -1159,24 +1157,26 @@ const downloadInvoiceByOrderCode = asyncHandler(async (req, res) => {
       investmentSettings
     };
 
-    const html = generateInvoiceHTML(enhancedInvoice);
+    // Generate PDF using pdfmake
+    const pdfInvoiceData = {
+      invoiceNumber: invoice.invoiceNumber,
+      orderId: invoice.orderId?.orderNumber || invoice.orderId,
+      customerName: invoice.customerId?.name || 'Customer',
+      customerEmail: invoice.customerId?.email || '',
+      customerPhone: invoice.customerId?.phone || '',
+      customerAddress: invoice.billingAddress || invoice.shippingAddress || '',
+      items: enhancedProducts.map((product, idx) => ({
+        name: product.name || 'Product',
+        purity: product.purity || '-',
+        quantity: product.quantity || 1,
+        weight: product.weight || '-',
+        price: product.totalPrice || product.price || 0
+      })),
+      totalAmount: invoice.grandTotal || invoice.totalAmount,
+      createdAt: invoice.invoiceDate || invoice.createdAt
+    };
 
-    // Generate PDF using Puppeteer
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
-
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-    
-    const pdf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' }
-    });
-
-    await browser.close();
+    const pdf = await generateOrderInvoicePdf(pdfInvoiceData);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`);
@@ -1262,24 +1262,26 @@ const downloadInvoice = asyncHandler(async (req, res) => {
       investmentSettings
     };
 
-    const html = generateInvoiceHTML(enhancedInvoice);
+    // Generate PDF using pdfmake
+    const pdfInvoiceData = {
+      invoiceNumber: invoice.invoiceNumber,
+      orderId: invoice.orderId?.orderNumber || invoice.orderId,
+      customerName: invoice.customerId?.name || 'Customer',
+      customerEmail: invoice.customerId?.email || '',
+      customerPhone: invoice.customerId?.phone || '',
+      customerAddress: invoice.billingAddress || invoice.shippingAddress || '',
+      items: enhancedProducts.map((product, idx) => ({
+        name: product.name || 'Product',
+        purity: product.purity || '-',
+        quantity: product.quantity || 1,
+        weight: product.weight || '-',
+        price: product.totalPrice || product.price || 0
+      })),
+      totalAmount: invoice.grandTotal || invoice.totalAmount,
+      createdAt: invoice.invoiceDate || invoice.createdAt
+    };
 
-    // Generate PDF using Puppeteer
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
-
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-    
-    const pdf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' }
-    });
-
-    await browser.close();
+    const pdf = await generateOrderInvoicePdf(pdfInvoiceData);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`);
