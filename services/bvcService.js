@@ -40,6 +40,7 @@ class BVCService {
       "Content-Type": "application/json",
       "XX-Authentication-Token": this.token,
       TimeStamp: this.tokenTimestamp,
+      Cookie: "ASP.NET_SessionId=yphl1cbzbhjpgpcyydtaymkb; ASP.NET_SessionId=mrnbwddzkztglhcm4bxqughr; ASP.NET_SessionId=su4uzueolzmrskhnzwadxaqy",
     };
   }
 
@@ -146,18 +147,26 @@ class BVCService {
       const headers = await this.getHeaders();
       const response = await axios.post(
         this.trackingUrl,
-        { DocketNo: docketNo },
+        { DocketNos: [docketNo] },
         { headers }
       );
 
-      const data = response.data || {};
+      const responseData = response.data || {};
 
-      if (data.IsSuccess === false) {
-        throw new Error(data.Message || "Tracking failed");
+      // Check if API call was successful
+      if (responseData.IsSuccess === false) {
+        throw new Error(responseData.Message || "Tracking failed");
       }
 
-      // Parse tracking history
-      const trackList = data.DocketTrackList || [];
+      // The response has a Dockets array, get the first docket
+      const dockets = responseData.Dockets || [];
+      if (dockets.length === 0) {
+        throw new Error("No tracking data found for docket number");
+      }
+
+      const docket = dockets[0]; // Get first docket from array
+
+      const trackList = docket.DocketTrackList || [];
       const trackingHistory = trackList.map((entry) => ({
         status: entry.DocketStatus,
         statusCode: entry.TRACKING_CODE,
@@ -168,32 +177,33 @@ class BVCService {
       }));
 
       // Determine order status from BVC status
-      const orderStatus = this._mapBvcStatusToOrderStatus(data.DocketStatus);
+      const orderStatus = this._mapBvcStatusToOrderStatus(docket.DocketStatus);
 
       console.log("✅ BVC Tracking Data Retrieved for:", docketNo);
+      console.log("📦 Tracking History Count:", trackingHistory.length);
 
       return {
         success: true,
-        docketNo: data.DocketNo,
-        orderNo: data.OrderNo,
-        status: data.DocketStatus,
-        statusCode: data.TrackingCode,
+        docketNo: docket.DocketNo,
+        orderNo: docket.OrderNo,
+        status: docket.DocketStatus,
+        statusCode: docket.TrackingCode,
         orderStatus: orderStatus,
-        deliveryType: data.DeliveryType,
-        serviceType: data.ServiceType,
-        originCity: data.OriginCity,
-        destinationCity: data.DestinationCity,
-        receiverName: data.ReciverName,
-        receiverPhone: data.ReciverContactNo,
-        pincode: data.Pincode,
-        noOfPieces: data.NoOfPieces,
-        actualWeight: data.ActualWeight,
-        chargedWeight: data.ChargedWeight,
-        amount: data.Amount,
-        codAmount: data.CODAmount,
-        ndrReason: data.NDRReason,
+        deliveryType: docket.DeliveryType,
+        serviceType: docket.ServiceType,
+        originCity: docket.OriginCity,
+        destinationCity: docket.DestinationCity,
+        receiverName: docket.ReciverName,
+        receiverPhone: docket.ReciverContactNo,
+        pincode: docket.Pincode,
+        noOfPieces: docket.NoOfPieces,
+        actualWeight: docket.ActualWeight,
+        chargedWeight: docket.ChargedWeight,
+        amount: docket.Amount,
+        codAmount: docket.CODAmount,
+        ndrReason: docket.NDRReason,
         trackingHistory: trackingHistory,
-        rawResponse: data,
+        rawResponse: responseData, // Include full response
       };
     } catch (error) {
       console.error("❌ BVC Tracking Error:", error.message);

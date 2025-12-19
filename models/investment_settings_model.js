@@ -4,6 +4,18 @@ const investmentSchema = new mongoose.Schema({
     goldRate: {
         type: Number,
         default: 0
+    }, // Keep for backward compatibility (24kt)
+    goldRate24kt: {
+        type: Number,
+        default: 0
+    },
+    goldRate22kt: {
+        type: Number,
+        default: 0
+    },
+    goldRate18kt: {
+        type: Number,
+        default: 0
     }, 
     silverRate: {
         type: Number,

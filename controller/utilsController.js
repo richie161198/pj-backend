@@ -22,7 +22,10 @@ const getInvestmentSettings = asyncHandler(async (req, res) => {
     }
 
     const result = {
-      goldPrice: settings.goldRate ?? null, 
+      goldPrice: settings.goldRate24kt || settings.goldRate || null, // 24kt for backward compatibility
+      goldPrice24kt: settings.goldRate24kt || settings.goldRate || null,
+      goldPrice22kt: settings.goldRate22kt || null,
+      goldPrice18kt: settings.goldRate18kt || null,
       goldStatus: settings.goldStatus ?? "inactive",
       silverPrice: settings.silverRate ?? null, 
       silverStatus: settings.silverStatus ?? "inactive",
@@ -54,25 +57,54 @@ const createInvestmentSettings = asyncHandler(async (req, res) => {
        });
      }
   try {
-    const { goldRate, goldStatus, silverRate, silverStatus, makingChargesPercentage } = req.body;
-console.log("Parsed Input:", { goldRate, goldStatus, silverRate, silverStatus, makingChargesPercentage });
-    if (!goldRate || !silverRate) {
+    const { 
+      goldRate, 
+      goldRate24kt, 
+      goldRate22kt, 
+      goldRate18kt, 
+      goldStatus, 
+      silverRate, 
+      silverStatus, 
+      makingChargesPercentage 
+    } = req.body;
+    
+    console.log("Parsed Input:", { 
+      goldRate, 
+      goldRate24kt, 
+      goldRate22kt, 
+      goldRate18kt, 
+      goldStatus, 
+      silverRate, 
+      silverStatus, 
+      makingChargesPercentage 
+    });
+    
+    // Use goldRate24kt if provided, otherwise fall back to goldRate for backward compatibility
+    const finalGoldRate24kt = goldRate24kt || goldRate;
+    
+    if (!finalGoldRate24kt || !silverRate) {
       return res.status(400).json({
         status: false,
-        message: "Gold rate and Silver rate are required",
+        message: "Gold rate (24kt) and Silver rate are required",
       });
     }
 
     // Get previous prices to check if they changed
     const previousSettings = await InvestmentSettings.findOne().sort({ updatedAt: -1 });
     const pricesChanged = !previousSettings || 
-      previousSettings.goldRate !== goldRate || 
+      previousSettings.goldRate24kt !== finalGoldRate24kt || 
+      previousSettings.goldRate22kt !== (goldRate22kt || 0) ||
+      previousSettings.goldRate18kt !== (goldRate18kt || 0) ||
       previousSettings.silverRate !== silverRate;
 
     // either update existing or create new
     let settings = await InvestmentSettings.findOne();
     if (settings) {
-      settings.goldRate = goldRate;
+      // Update goldRate for backward compatibility (use 24kt value)
+      settings.goldRate = finalGoldRate24kt;
+      settings.goldRate24kt = finalGoldRate24kt;
+      settings.goldRate22kt = goldRate22kt || 0;
+      settings.goldRate18kt = goldRate18kt || 0;
       settings.goldStatus = goldStatus ?? settings.goldStatus;
       settings.silverRate = silverRate;
       settings.silverStatus = silverStatus ?? settings.silverStatus;
@@ -82,7 +114,13 @@ console.log("Parsed Input:", { goldRate, goldStatus, silverRate, silverStatus, m
       await settings.save();
     } else {
       settings = await InvestmentSettings.create({
-        ...req.body,
+        goldRate: finalGoldRate24kt, // Backward compatibility
+        goldRate24kt: finalGoldRate24kt,
+        goldRate22kt: goldRate22kt || 0,
+        goldRate18kt: goldRate18kt || 0,
+        goldStatus: goldStatus ?? true,
+        silverRate: silverRate,
+        silverStatus: silverStatus ?? false,
         makingChargesPercentage: makingChargesPercentage || 15
       });
     }
@@ -92,7 +130,9 @@ console.log("Parsed Input:", { goldRate, goldStatus, silverRate, silverStatus, m
       console.log("🔄 Prices changed, updating all product prices...");
       try {
         const updateResult = await updateAllProductPrices(
-          goldRate, 
+          finalGoldRate24kt, // 24kt gold price
+          goldRate22kt || 0, // 22kt gold price
+          goldRate18kt || 0, // 18kt gold price
           silverRate, 
           settings.makingChargesPercentage || 15
         );
@@ -196,16 +236,18 @@ const updateAllProductPricesManually = asyncHandler(async (req, res) => {
     // Get current prices
     const currentPrices = await getCurrentPrices();
     
-    if (!currentPrices.goldPrice || !currentPrices.silverPrice) {
+    if (!currentPrices.goldPrice24kt || !currentPrices.silverPrice) {
       return res.status(400).json({
         status: false,
-        message: "Gold and Silver prices must be set before updating product prices"
+        message: "Gold (24kt) and Silver prices must be set before updating product prices"
       });
     }
 
-    // Update all product prices
+    // Update all product prices with karat-specific gold rates
     const updateResult = await updateAllProductPrices(
-      currentPrices.goldPrice,
+      currentPrices.goldPrice24kt || currentPrices.goldPrice,
+      currentPrices.goldPrice22kt || currentPrices.goldPrice24kt || currentPrices.goldPrice,
+      currentPrices.goldPrice18kt || currentPrices.goldPrice24kt || currentPrices.goldPrice,
       currentPrices.silverPrice,
       req.body.makingChargesPercentage || 15
     );
@@ -215,7 +257,9 @@ const updateAllProductPricesManually = asyncHandler(async (req, res) => {
       message: "✅ All product prices updated successfully",
       data: updateResult,
       currentPrices: {
-        goldPrice: currentPrices.goldPrice,
+        goldPrice24kt: currentPrices.goldPrice24kt || currentPrices.goldPrice,
+        goldPrice22kt: currentPrices.goldPrice22kt,
+        goldPrice18kt: currentPrices.goldPrice18kt,
         silverPrice: currentPrices.silverPrice,
         makingChargesPercentage: req.body.makingChargesPercentage || 15
       }
@@ -248,17 +292,19 @@ const updateSingleProductPrice = asyncHandler(async (req, res) => {
     // Get current prices
     const currentPrices = await getCurrentPrices();
     
-    if (!currentPrices.goldPrice || !currentPrices.silverPrice) {
+    if (!currentPrices.goldPrice24kt || !currentPrices.silverPrice) {
       return res.status(400).json({
         status: false,
-        message: "Gold and Silver prices must be set before updating product prices"
+        message: "Gold (24kt) and Silver prices must be set before updating product prices"
       });
     }
 
-    // Update single product price
+    // Update single product price with karat-specific gold rates
     const updateResult = await updateSingleProductPrice(
       req.params.id,
-      currentPrices.goldPrice,
+      currentPrices.goldPrice24kt || currentPrices.goldPrice,
+      currentPrices.goldPrice22kt || currentPrices.goldPrice24kt || currentPrices.goldPrice,
+      currentPrices.goldPrice18kt || currentPrices.goldPrice24kt || currentPrices.goldPrice,
       currentPrices.silverPrice,
       req.body.makingChargesPercentage || 15
     );
@@ -298,17 +344,29 @@ const getProductPriceBreakdown = asyncHandler(async (req, res) => {
     // Get current prices
     const currentPrices = await getCurrentPrices();
     
-    if (!currentPrices.goldPrice || !currentPrices.silverPrice) {
+    if (!currentPrices.goldPrice24kt || !currentPrices.silverPrice) {
       return res.status(400).json({
         status: false,
-        message: "Gold and Silver prices must be set to calculate product prices"
+        message: "Gold (24kt) and Silver prices must be set to calculate product prices"
       });
+    }
+
+    // Determine which gold price to use based on product's selectedCaret
+    let selectedGoldPrice = currentPrices.goldPrice24kt || currentPrices.goldPrice;
+    const caret = (product.selectedCaret || '').toString().toUpperCase().trim();
+    
+    if (caret.includes('24') || caret === '24K' || caret === '24KT') {
+      selectedGoldPrice = currentPrices.goldPrice24kt || currentPrices.goldPrice;
+    } else if (caret.includes('22') || caret === '22K' || caret === '22KT') {
+      selectedGoldPrice = currentPrices.goldPrice22kt || currentPrices.goldPrice24kt || currentPrices.goldPrice;
+    } else if (caret.includes('18') || caret === '18K' || caret === '18KT') {
+      selectedGoldPrice = currentPrices.goldPrice18kt || currentPrices.goldPrice24kt || currentPrices.goldPrice;
     }
 
     // Calculate detailed price breakdown
     const priceCalculation = calculateProductPrice(
       product,
-      currentPrices.goldPrice,
+      selectedGoldPrice,
       currentPrices.silverPrice,
       req.query.makingChargesPercentage || 15
     );
@@ -324,9 +382,13 @@ const getProductPriceBreakdown = asyncHandler(async (req, res) => {
           categories: product.categories
         },
         currentPrices: {
-          goldPrice: currentPrices.goldPrice,
+          goldPrice24kt: currentPrices.goldPrice24kt || currentPrices.goldPrice,
+          goldPrice22kt: currentPrices.goldPrice22kt,
+          goldPrice18kt: currentPrices.goldPrice18kt,
           silverPrice: currentPrices.silverPrice,
-          makingChargesPercentage: req.query.makingChargesPercentage || 15
+          makingChargesPercentage: req.query.makingChargesPercentage || 15,
+          selectedCaret: product.selectedCaret || 'N/A',
+          goldPriceUsed: selectedGoldPrice
         },
         priceBreakdown: priceCalculation.priceBreakdown,
         summary: {

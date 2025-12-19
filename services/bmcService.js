@@ -160,7 +160,102 @@ class BMCService {
   // }
 
 
-  async createShipment(orderData) {
+  // async createShipment(orderData) {
+  //   console.log("📦 Creating BVC Shipment: createShipmen", orderData);
+  //   try {
+  //     const {
+  //       orderId,
+  //       orderCode,
+  //       customerName,
+  //       customerPhone,
+  //       customerEmail,
+  //       deliveryAddress,
+  //       items,
+  //       totalAmount,
+  //       codAmount = 0,
+  //       weight = 0.5,
+  //       packageCount = 1,
+  //     } = orderData;
+
+
+  //     // 2️⃣ Build payload as per spec
+  //     const payload = {
+  //       CustomerId: this.clientId, // e.g. "10001"
+  //       OrderUploadData: [
+  //         {
+  //           OrderNo: orderCode,
+  //           AgentID: "KSAN0001",
+  //           ProductCode: items[0]?.name || "Product",
+  //           ItemName: items[0]?.name || "Item",
+  //           AWBNo: `PG${Date.now()}`.slice(0, 9), // must be 9 chars
+  //           No_Of_Pieces: packageCount,
+  //           CustomerName: customerName,
+  //           CustomerAdd1: deliveryAddress.addressLine1 || "N/A",
+  //           CustomerAdd2: deliveryAddress.addressLine2 || "",
+  //           CustomerCity: deliveryAddress.city || "N/A",
+  //           CustomerState: deliveryAddress.state || "N/A",
+  //           CustomerPincode: deliveryAddress.pincode || "000000",
+  //           CustomerTeleNo: customerPhone || "0000000000",
+  //           CustomerMobileNo: customerPhone || "0000000000",
+  //           TotalAmt: totalAmount,
+  //           PaymentMode:  "P",
+  //           CollectableAmt: codAmount,
+  //           Weight: weight,
+  //           UOM: "Per KG",
+  //           ServiceType: "Express",
+  //         },
+  //       ],
+  //     };
+  //     console.log({ "BVC Payload": payload
+  //     });
+  //     const response = await axios.post(
+  //       'https://bvcmars.com/RestService/OrderUploadService.svc/PushOrderUpload',
+  //       payload,
+  //       {
+  //         headers: {
+  //           // "XX-Authentication-Token": XXAuthenticationToken,
+  //           // "TimeStamp": TimeStamp,
+  //           "Content-Type": "application/json",
+  //           "XXAuthenticationToken": "oOwCZ4oD/y8OFyG4H1y6AoQ7UxGFJwZLCaKvAk5a5MdxT0YlUaIFUTfC4pS/XQXU43HCRXZIr7bWNNuC/PKbAHrd7wQCEXYs2ZI+Sr1Fvunxa7U6NnnJzaHYPdmHHjpv",
+  //           "TimeStamp": "202510131455560291",
+  //           // "CustomerPublicKey": "174EE6D5-B9FB-482B-AA1B-1378673661A2"
+  //           'Cookie':
+  //             'ASP.NET_SessionId=yphl1cbzbhjpgpcyydtaymkb; ASP.NET_SessionId=mrnbwddzkztglhcm4bxqughr; ASP.NET_SessionId=su4uzueolzmrskhnzwadxaqy',
+
+  //         },
+  //       }
+  //     );
+
+  //     console.log("✅ BVC Shipment Created:", response.data);
+
+  //     // 4️⃣ Handle success
+  //     const uploadResult = response.data?.OrderUploadResult?.[0] || {};
+  //     if (uploadResult.Succeed) {
+  //       console.log("✅ BVC Shipment Created Successfully:", uploadResult.DockNo);
+  //       return {
+  //         success: true,
+  //         awbNumber: uploadResult.DockNo,
+  //         trackingNumber: uploadResult.DockNo,
+  //         courierName: "BVC Logistics",
+  //       };
+  //     } else {
+  //       throw new Error(uploadResult.Reason || "BVC Upload failed");
+  //     }
+  //   } catch (error) {
+  //     console.error("❌ BVC Shipment Creation Error:", error.message);
+
+  //     // fallback for dev
+  //     return {
+  //       success: false,
+  //       awbNumber: `PG${Date.now()}`.slice(0, 9),
+  //       trackingNumber: `DEV-${Date.now()}`,
+  //       courierName: "BVC Logistics",
+  //       error: error.message,
+  //     };
+  //   }
+  // }
+
+    async createShipment(orderData) {
     console.log("📦 Creating BVC Shipment: createShipmen", orderData);
     try {
       const {
@@ -173,12 +268,12 @@ class BMCService {
         items,
         totalAmount,
         codAmount = 0,
-        weight = 0.5,
+        weight ,
         packageCount = 1,
       } = orderData;
 
 
-      // 2️⃣ Build payload as per spec
+      
       const payload = {
         CustomerId: this.clientId, // e.g. "10001"
         OrderUploadData: [
@@ -206,25 +301,71 @@ class BMCService {
           },
         ],
       };
-      console.log({ "BVC Payload": payload
-      });
-      const response = await axios.post(
-        'https://bvcmars.com/RestService/OrderUploadService.svc/PushOrderUpload',
-        payload,
-        {
-          headers: {
-            // "XX-Authentication-Token": XXAuthenticationToken,
-            // "TimeStamp": TimeStamp,
-            "Content-Type": "application/json",
-            "XXAuthenticationToken": "oOwCZ4oD/y8OFyG4H1y6AoQ7UxGFJwZLCaKvAk5a5MdxT0YlUaIFUTfC4pS/XQXU43HCRXZIr7bWNNuC/PKbAHrd7wQCEXYs2ZI+Sr1Fvunxa7U6NnnJzaHYPdmHHjpv",
-            "TimeStamp": "202510131455560291",
-            // "CustomerPublicKey": "174EE6D5-B9FB-482B-AA1B-1378673661A2"
-            'Cookie':
-              'ASP.NET_SessionId=yphl1cbzbhjpgpcyydtaymkb; ASP.NET_SessionId=mrnbwddzkztglhcm4bxqughr; ASP.NET_SessionId=su4uzueolzmrskhnzwadxaqy',
 
-          },
-        }
-      );
+//       const payload={
+//     "CustomerId": "CC000700340",
+//     "OrderUploadData": [
+//         {
+//             "OrderNo": "PJ1611788001",
+//             "AgentID": "KSAN0001",
+//             "ProductCode": "1gm Gold coin",
+//             "ItemName": "1gm Gold coin",
+//             "AWBNo": "281125559001",
+//             "No_Of_Pieces": 1,
+//             "CustomerName": "Chandran J",
+//             "CustomerAdd1": "No.10 new street Iyappan nagar Madipakkam",
+//             "CustomerCity": "Chennai",
+//             "CustomerState": "Tamil Nadu",
+//             "CustomerPincode": "600091",
+//             "CustomerTeleNo": "7092053592",
+//             "CustomerMobileNo": "7092053592",
+//             "TotalAmt": 10000,
+//             "PaymentMode": "P",
+//             "CollectableAmt": 0,
+//             "Weight": 0.001,
+//             "UOM": "Per KG",
+//             "ServiceType": "Express"
+//         }
+//     ]
+// }
+      console.log({ "BVC Payload": payload.OrderUploadData
+      });
+      // const response = await axios.post(
+      //   'https://bvcmars.com/RestService/OrderUploadService.svc/PushOrderUpload',
+      //   payload,
+      //   {
+      //     headers: {
+      //       // "XX-Authentication-Token": XXAuthenticationToken,
+      //       // "TimeStamp": TimeStamp,
+      //       "Content-Type": "application/json",
+      //       "XXAuthenticationToken": "oOwCZ4oD/y8OFyG4H1y6AoQ7UxGFJwZLCaKvAk5a5MdxT0YlUaIFUTfC4pS/XQXU43HCRXZIr7bWNNuC/PKbAHrd7wQCEXYs2ZI+Sr1Fvunxa7U6NnnJzaHYPdmHHjpv",
+      //       "TimeStamp": "202510131455560291",
+      //       // "CustomerPublicKey": "174EE6D5-B9FB-482B-AA1B-1378673661A2"
+      //       'Cookie':
+      //         'ASP.NET_SessionId=yphl1cbzbhjpgpcyydtaymkb; ASP.NET_SessionId=mrnbwddzkztglhcm4bxqughr; ASP.NET_SessionId=su4uzueolzmrskhnzwadxaqy',
+
+      //     },
+      //   }
+      // );
+
+      const response = await axios.post(
+  "https://bvcmars.com/RestService/OrderUploadService.svc/PushOrderUpload",
+  payload,
+  {
+    headers: {
+      "Content-Type": "application/json",
+      "TimeStamp": "202510131455560291",
+      "XX-Authentication-Token":
+        "oOwCZ4oD/y8OFyG4H1y6AoQ7UxGFJwZLCaKvAk5a5MdxT0YlUaIFUTfC4pS/XQXU43HCRXZIr7bWNNuC/PKbAHrd7wQCEXYs2ZI+Sr1Fvunxa7U6NnnJzaHYPdmHHjpv",
+
+      // REMOVE cookie unless really required
+      // 'Cookie': 'ASP.NET_SessionId=xxx'
+    },
+  }
+);
+
+console.log("Result:", response.data);
+
 
       console.log("✅ BVC Shipment Created:", response.data);
 
@@ -242,15 +383,15 @@ class BMCService {
         throw new Error(uploadResult.Reason || "BVC Upload failed");
       }
     } catch (error) {
-      console.error("❌ BVC Shipment Creation Error:", error.message);
+      console.error("❌ BVC Shipment Creation Error:", error);
 
-      // fallback for dev
+      // Return error response instead of throwing to allow graceful handling
       return {
         success: false,
         awbNumber: `PG${Date.now()}`.slice(0, 9),
         trackingNumber: `DEV-${Date.now()}`,
         courierName: "BVC Logistics",
-        error: error.message,
+        error: error.message || "BVC Upload failed",
       };
     }
   }

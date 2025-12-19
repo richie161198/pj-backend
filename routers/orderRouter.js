@@ -4,7 +4,7 @@ const {
   getAllOrderHistory,
   getUserOrderHistory,
   getParticularOrderHistory, depositINR, withdrawINR, buyOrSellGold,generateTokenPhonePe,createOrderPhonePe, placeOrder, returnOrder, refundOrder, createReturnRefundRequest, getOrderHistory,
-   getAllOrdersAdmin, getAllProductOrdersAdmin, getAllReturnRefundRequestsAdmin,checkPhonePeOrderStatus, acceptReturnRefundRequest, rejectReturnRefundRequest, getReturnRefundRequestByOrderId, getUserReturnRefundHistory, getInvestmentOrdersByMonth, getTotalRevenue, getTotalInvestmentOrders} = require("../controller/orderController")
+   getAllOrdersAdmin, getAllProductOrdersAdmin, getAllReturnRefundRequestsAdmin,checkPhonePeOrderStatus, acceptReturnRefundRequest, rejectReturnRefundRequest, getReturnRefundRequestByOrderId, getUserReturnRefundHistory, getInvestmentOrdersByMonth, getTotalRevenue, getTotalInvestmentOrders, sendOrderWhatsAppMessage} = require("../controller/orderController")
 const { isAuth } = require("../middleware/tokenValidation");
 
 const router = express.Router();
@@ -40,5 +40,7 @@ router.get("/returnRefundRequest/:orderId", isAuth, getReturnRefundRequestByOrde
 router.get("/returnRefundHistory", isAuth, getUserReturnRefundHistory);
 router.route("/getOrderHistory").get(isAuth,getOrderHistory);
 
+// Send WhatsApp message for an order
+router.post("/sendWhatsAppMessage", isAuth, sendOrderWhatsAppMessage);
 
 module.exports = router;

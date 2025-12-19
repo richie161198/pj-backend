@@ -1102,78 +1102,49 @@ const downloadInvoiceByOrderCode = asyncHandler(async (req, res) => {
 
     console.log(`✅ Invoice found: ${invoice._id}`);
 
-    // Fetch required models
-    const Product = require('../models/product_model');
-    const InvestmentSettings = require('../models/investment_settings_model');
+    // Use saved invoice data directly (same as what was sent in email)
+    // This ensures consistency between email and download
+    const shippingAddr = invoice.shippingDetails?.shippingAddress || invoice.customerDetails?.address || {};
     
-    // Latest gold rates
-    const investmentSettings = await InvestmentSettings.findOne().sort({ createdAt: -1 });
-    
-    // Enhance product info
-    const enhancedProducts = await Promise.all(
-      invoice.products.map(async (product) => {
-        const fullProduct = await Product.findById(product.productId);
-        if (fullProduct) {
-          const productDetails = fullProduct.productDetails || [];
-          const priceDetails = fullProduct.priceDetails || [];
-          
-          let weight = product.weight || 0;
-          let purity = product.purity || '22Karat';
-          let metalType = product.metalType || 'gold';
-          
-          productDetails.forEach(detail => {
-            if (detail.type === 'Metal') {
-              if (detail.attributes?.['Gross Weight']) {
-                weight = parseFloat(detail.attributes['Gross Weight']) || weight;
-              }
-              if (detail.attributes?.Karatage) {
-                purity = detail.attributes.Karatage;
-              }
-              if (detail.attributes?.Material) {
-                metalType = detail.attributes.Material.toLowerCase();
-              }
-            }
-          });
+    // Format shipping address
+    const formattedShippingAddress = shippingAddr.street 
+      ? `${shippingAddr.street || ''}${shippingAddr.landmark ? ', ' + shippingAddr.landmark : ''}\n${shippingAddr.city || ''}, ${shippingAddr.state || ''} - ${shippingAddr.pincode || ''}`
+      : (typeof shippingAddr === 'string' ? shippingAddr : 'N/A');
 
-          return {
-            ...product.toObject?.() || product,
-            name: fullProduct.name || product.name || 'N/A',
-            description: fullProduct.description || '',
-            images: fullProduct.images || [],
-            weight,
-            purity,
-            metalType,
-            productDetails,
-            priceDetails
-          };
-        }
-        return typeof product.toObject === 'function' ? product.toObject() : product;
-      })
-    );
+    // Format billing address
+    const billingAddr = invoice.customerDetails?.address || {};
+    const formattedBillingAddress = billingAddr.street
+      ? `${billingAddr.street || ''}\n${billingAddr.city || ''}, ${billingAddr.state || ''} - ${billingAddr.pincode || ''}`
+      : 'N/A';
 
-    const enhancedInvoice = {
-      ...invoice.toObject(),
-      products: enhancedProducts,
-      investmentSettings
-    };
-
-    // Generate PDF using pdfmake
+    // Generate PDF using saved invoice data (same structure as email)
     const pdfInvoiceData = {
       invoiceNumber: invoice.invoiceNumber,
-      orderId: invoice.orderId?.orderNumber || invoice.orderId,
-      customerName: invoice.customerId?.name || 'Customer',
-      customerEmail: invoice.customerId?.email || '',
-      customerPhone: invoice.customerId?.phone || '',
-      customerAddress: invoice.billingAddress || invoice.shippingAddress || '',
-      items: enhancedProducts.map((product, idx) => ({
+      orderId: invoice.orderId?.orderCode || invoice.orderId?.orderNumber || invoice.orderId,
+      orderDate: invoice.orderId?.createdAt || invoice.createdAt,
+      customerName: invoice.customerDetails?.name || invoice.customerId?.name || 'Customer',
+      customerEmail: invoice.customerDetails?.email || invoice.customerId?.email || '',
+      customerPhone: invoice.customerDetails?.phone || invoice.customerId?.phone || '',
+      billingAddress: formattedBillingAddress,
+      shippingAddress: formattedShippingAddress,
+      customerAddress: formattedBillingAddress, // Fallback
+      items: invoice.products.map((product) => ({
         name: product.name || 'Product',
-        purity: product.purity || '-',
+        purity: product.purity || '22Karat',
         quantity: product.quantity || 1,
-        weight: product.weight || '-',
-        price: product.totalPrice || product.price || 0
+        weight: product.weight || 0,
+        makingCharges: product.makingCharges || 0, // Use saved making charges
+        gst: product.gst || 0, // Use saved GST
+        discount: product.discount || 0, // Use saved discount
+        price: product.totalPrice || product.finalPrice || 0,
+        finalPrice: product.finalPrice || product.totalPrice || 0
       })),
-      totalAmount: invoice.grandTotal || invoice.totalAmount,
-      createdAt: invoice.invoiceDate || invoice.createdAt
+      totalAmount: invoice.pricing?.grandTotal || invoice.grandTotal || 0,
+      totalMakingCharges: invoice.pricing?.totalMakingCharges || 0,
+      totalGST: invoice.pricing?.totalGST || 0,
+      totalDiscount: invoice.pricing?.totalDiscount || 0,
+      subtotal: invoice.pricing?.subtotal || 0,
+      createdAt: invoice.createdAt || invoice.invoiceDate || new Date()
     };
 
     const pdf = await generateOrderInvoicePdf(pdfInvoiceData);
@@ -1197,7 +1168,7 @@ const downloadInvoice = asyncHandler(async (req, res) => {
   try {
     const invoice = await Invoice.findById(req.params.id)
       .populate('customerId', 'name email phone')
-      .populate('orderId', 'orderNumber status')
+      .populate('orderId', 'orderCode orderNumber status')
       .populate('createdBy', 'name email');
 
     if (!invoice) {
@@ -1207,78 +1178,49 @@ const downloadInvoice = asyncHandler(async (req, res) => {
       });
     }
 
-    // Fetch required models
-    const Product = require('../models/product_model');
-    const InvestmentSettings = require('../models/investment_settings_model');
+    // Use saved invoice data directly (same as what was sent in email)
+    // This ensures consistency between email, app, and admin panel
+    const shippingAddr = invoice.shippingDetails?.shippingAddress || invoice.customerDetails?.address || {};
     
-    // Latest gold rates
-    const investmentSettings = await InvestmentSettings.findOne().sort({ createdAt: -1 });
-    
-    // Enhance product info
-    const enhancedProducts = await Promise.all(
-      invoice.products.map(async (product) => {
-        const fullProduct = await Product.findById(product.productId);
-        if (fullProduct) {
-          const productDetails = fullProduct.productDetails || [];
-          const priceDetails = fullProduct.priceDetails || [];
-          
-          let weight = product.weight || 0;
-          let purity = product.purity || '22Karat';
-          let metalType = product.metalType || 'gold';
-          
-          productDetails.forEach(detail => {
-            if (detail.type === 'Metal') {
-              if (detail.attributes?.['Gross Weight']) {
-                weight = parseFloat(detail.attributes['Gross Weight']) || weight;
-              }
-              if (detail.attributes?.Karatage) {
-                purity = detail.attributes.Karatage;
-              }
-              if (detail.attributes?.Material) {
-                metalType = detail.attributes.Material.toLowerCase();
-              }
-            }
-          });
+    // Format shipping address
+    const formattedShippingAddress = shippingAddr.street 
+      ? `${shippingAddr.street || ''}${shippingAddr.landmark ? ', ' + shippingAddr.landmark : ''}\n${shippingAddr.city || ''}, ${shippingAddr.state || ''} - ${shippingAddr.pincode || ''}`
+      : (typeof shippingAddr === 'string' ? shippingAddr : 'N/A');
 
-          return {
-            ...product.toObject?.() || product,
-            name: fullProduct.name || product.name || 'N/A',
-            description: fullProduct.description || '',
-            images: fullProduct.images || [],
-            weight,
-            purity,
-            metalType,
-            productDetails,
-            priceDetails
-          };
-        }
-        return typeof product.toObject === 'function' ? product.toObject() : product;
-      })
-    );
+    // Format billing address
+    const billingAddr = invoice.customerDetails?.address || {};
+    const formattedBillingAddress = billingAddr.street
+      ? `${billingAddr.street || ''}\n${billingAddr.city || ''}, ${billingAddr.state || ''} - ${billingAddr.pincode || ''}`
+      : 'N/A';
 
-    const enhancedInvoice = {
-      ...invoice.toObject(),
-      products: enhancedProducts,
-      investmentSettings
-    };
-
-    // Generate PDF using pdfmake
+    // Generate PDF using saved invoice data (same structure as email and app)
     const pdfInvoiceData = {
       invoiceNumber: invoice.invoiceNumber,
-      orderId: invoice.orderId?.orderNumber || invoice.orderId,
-      customerName: invoice.customerId?.name || 'Customer',
-      customerEmail: invoice.customerId?.email || '',
-      customerPhone: invoice.customerId?.phone || '',
-      customerAddress: invoice.billingAddress || invoice.shippingAddress || '',
-      items: enhancedProducts.map((product, idx) => ({
+      orderId: invoice.orderId?.orderCode || invoice.orderId?.orderNumber || invoice.orderId,
+      orderDate: invoice.orderId?.createdAt || invoice.createdAt,
+      customerName: invoice.customerDetails?.name || invoice.customerId?.name || 'Customer',
+      customerEmail: invoice.customerDetails?.email || invoice.customerId?.email || '',
+      customerPhone: invoice.customerDetails?.phone || invoice.customerId?.phone || '',
+      billingAddress: formattedBillingAddress,
+      shippingAddress: formattedShippingAddress,
+      customerAddress: formattedBillingAddress, // Fallback
+      items: invoice.products.map((product) => ({
         name: product.name || 'Product',
-        purity: product.purity || '-',
+        purity: product.purity || '22Karat',
         quantity: product.quantity || 1,
-        weight: product.weight || '-',
-        price: product.totalPrice || product.price || 0
+        weight: product.weight || 0,
+        makingCharges: product.makingCharges || 0, // Use saved making charges
+        gst: product.gst || 0, // Use saved GST
+        discount: product.discount || 0, // Use saved discount
+        price: product.totalPrice || product.finalPrice || 0,
+        finalPrice: product.finalPrice || product.totalPrice || 0
       })),
-      totalAmount: invoice.grandTotal || invoice.totalAmount,
-      createdAt: invoice.invoiceDate || invoice.createdAt
+      totalAmount: invoice.pricing?.grandTotal || invoice.grandTotal || 0,
+      totalMakingCharges: invoice.pricing?.totalMakingCharges || 0,
+      totalGST: invoice.pricing?.totalGST || 0,
+      totalDiscount: invoice.pricing?.totalDiscount || 0,
+      subtotal: invoice.pricing?.subtotal || 0,
+      createdAt: invoice.createdAt || invoice.invoiceDate || new Date()
     };
 
     const pdf = await generateOrderInvoicePdf(pdfInvoiceData);

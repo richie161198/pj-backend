@@ -440,6 +440,10 @@ const generateOrderInvoicePdf = async (invoiceData) => {
     customerAddress,
     items,
     totalAmount,
+    totalMakingCharges,
+    totalGST,
+    totalDiscount,
+    subtotal,
     createdAt
   } = invoiceData;
 
@@ -473,12 +477,12 @@ const generateOrderInvoicePdf = async (invoiceData) => {
     return '' + num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  // Calculate totals from items
+  // Calculate totals from items (use provided totals if available, otherwise calculate)
   let totalQty = 0;
   let totalWeight = 0;
-  let totalMakingCharges = 0;
-  let totalGst = 0;
-  let totalDiscount = 0;
+  let calculatedMakingCharges = 0;
+  let calculatedGst = 0;
+  let calculatedDiscount = 0;
   let grandTotal = 0;
 
   // Process items
@@ -492,12 +496,16 @@ const generateOrderInvoicePdf = async (invoiceData) => {
 
     totalQty += qty;
     totalWeight += weight;
-    totalMakingCharges += makingCharges;
-    totalGst += gst;
-    totalDiscount += discount;
+    calculatedMakingCharges += makingCharges;
+    calculatedGst += gst;
+    calculatedDiscount += discount;
     grandTotal += price;
   });
 
+  // Use provided totals if available (from saved invoice), otherwise use calculated
+  const finalMakingCharges = totalMakingCharges !== undefined ? totalMakingCharges : calculatedMakingCharges;
+  const finalGst = totalGST !== undefined ? totalGST : calculatedGst;
+  const finalDiscount = totalDiscount !== undefined ? totalDiscount : calculatedDiscount;
   const finalTotal = totalAmount || grandTotal;
 
   // Build items table body
@@ -547,9 +555,9 @@ const generateOrderInvoicePdf = async (invoiceData) => {
     { text: 'TOTAL', fontSize: 9, bold: true, alignment: 'right', fillColor: lightGoldBg, margin: [4, 7, 4, 7] },
     { text: totalQty.toString(), fontSize: 9, bold: true, alignment: 'center', fillColor: lightGoldBg, margin: [4, 7, 4, 7] },
     { text: `${totalWeight.toFixed(3)}g`, fontSize: 9, bold: true, alignment: 'center', fillColor: lightGoldBg, margin: [4, 7, 4, 7] },
-    { text: totalMakingCharges > 0 ? formatAmt(totalMakingCharges) : '-', fontSize: 8, bold: true, alignment: 'center', fillColor: lightGoldBg, margin: [2, 7, 2, 7] },
-    { text: totalGst > 0 ? formatAmt(totalGst) : '-', fontSize: 8, bold: true, alignment: 'center', fillColor: lightGoldBg, margin: [2, 7, 2, 7] },
-    { text: totalDiscount > 0 ? formatAmt(totalDiscount) : '-', fontSize: 8, bold: true, alignment: 'center', fillColor: lightGoldBg, margin: [2, 7, 2, 7] },
+    { text: finalMakingCharges > 0 ? formatAmt(finalMakingCharges) : '-', fontSize: 8, bold: true, alignment: 'center', fillColor: lightGoldBg, margin: [2, 7, 2, 7] },
+    { text: finalGst > 0 ? formatAmt(finalGst) : '-', fontSize: 8, bold: true, alignment: 'center', fillColor: lightGoldBg, margin: [2, 7, 2, 7] },
+    { text: finalDiscount > 0 ? formatAmt(finalDiscount) : '-', fontSize: 8, bold: true, alignment: 'center', fillColor: lightGoldBg, margin: [2, 7, 2, 7] },
     { text: formatAmt(finalTotal), fontSize: 9, bold: true, alignment: 'right', fillColor: lightGoldBg, margin: [4, 7, 4, 7] }
   ]);
 

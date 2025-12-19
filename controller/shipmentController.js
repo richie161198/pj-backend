@@ -38,10 +38,7 @@ const fixTrackingNumberIndex = async () => {
   }
 };
 
-/**
- * Create a new shipment for an order
- * POST /api/v0/shipments/bvc/create
- */
+
 const createShipment = async (req, res) => {
   try {
     // Fix problematic index on first call

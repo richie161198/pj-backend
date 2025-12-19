@@ -8,8 +8,10 @@ const Shipment = require('../models/shipment_model');
 const User = require('../models/userModel');
 const Product = require('../models/product_model');
 const bmcService = require('../services/bmcService');
+const bvcService = require('../services/bvcService');
 const { sendEmail, sendEmailWithAttachment } = require('../helpers/mailer');
 const { generateOrderInvoicePdf, generateInvestmentInvoicePdf, logoBase64 } = require('../services/pdfService');
+const twilio = require("twilio");
 
 const fs = require('fs');
 const { Cashfree, CFEnvironment } = require("cashfree-pg");
@@ -19,6 +21,52 @@ var cashfree = new Cashfree(
   process.env.CASHFREE_SECRET_prod
 );
 const userModel = require("../models/userModel");
+
+// Initialize Twilio client for WhatsApp messaging
+const twilioClient = twilio(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN
+);
+
+// WhatsApp Content Template SID
+// const WHATSAPP_TEMPLATE_SID = "HXf4af99bd1ba1e9a90b4b5fb2a872d441";
+const WHATSAPP_TEMPLATE_SID = "HXf40a829bf471a210c132870232e28a42";
+
+// Helper function to send WhatsApp message using Content Template
+async function sendWhatsAppMessage(phoneNumber, orderCode, invoiceNumber, totalAmount) {
+  try {
+    // Format phone number (ensure it starts with +91 for India)
+    let formattedPhone = phoneNumber;
+    if (!formattedPhone.startsWith('+')) {
+      // Remove any leading zeros or country code if present
+      formattedPhone = formattedPhone.replace(/^0+/, '').replace(/^91/, '');
+      formattedPhone = `whatsapp:+91${formattedPhone}`;
+    } else {
+      formattedPhone = `whatsapp:${formattedPhone}`;
+    }
+
+    console.log(`📱 Sending WhatsApp message to: ${formattedPhone}`);
+
+    // Send WhatsApp message using Content Template
+    const message = await twilioClient.messages.create({
+      from: `whatsapp:+919933661149`,
+      to: formattedPhone,
+      contentSid: WHATSAPP_TEMPLATE_SID,
+      contentVariables: JSON.stringify({
+        "1": orderCode,           // Order Code
+        "2": invoiceNumber,        // Invoice Number
+        "3": `₹${parseFloat(totalAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` // Total Amount
+      })
+    });
+
+    console.log(`✅ WhatsApp message sent successfully. SID: ${message.sid} ${message.body}`);
+    return { success: true, messageSid: message.sid };
+  } catch (error) {
+    console.error('❌ Error sending WhatsApp message:', error.message);
+    // Don't throw error - WhatsApp is optional, order should still succeed
+    return { success: false, error: error.message };
+  }
+}
 
 // Helper function to generate order confirmation email HTML
 function generateOrderConfirmationEmailHTML(order, customer, products, pricing, invoiceNumber) {
@@ -135,6 +183,23 @@ async function generateOrderInvoicePDF(invoice, customerDetails, products, prici
     return String(val);
   };
 
+  // Format shipping address if available
+  let shippingAddr = customerDetails.shippingAddress || customerDetails.address;
+  if (invoice.shippingDetails?.shippingAddress) {
+    const addr = invoice.shippingDetails.shippingAddress;
+    if (typeof addr === 'object') {
+      shippingAddr = `${addr.street || ''}${addr.landmark ? ', ' + addr.landmark : ''}\n${addr.city || ''}, ${addr.state || ''} - ${addr.pincode || ''}`;
+    } else {
+      shippingAddr = addr;
+    }
+  }
+
+  // Format billing address
+  let billingAddr = customerDetails.address;
+  if (typeof billingAddr === 'object') {
+    billingAddr = `${billingAddr.street || ''}\n${billingAddr.city || ''}, ${billingAddr.state || ''} - ${billingAddr.pincode || ''}`;
+  }
+
   // Prepare data for pdfService - matching the exact invoice design
   const pdfInvoiceData = {
     invoiceNumber: toString(invoice.invoiceNumber),
@@ -143,8 +208,9 @@ async function generateOrderInvoicePDF(invoice, customerDetails, products, prici
     customerName: toString(customerDetails.name) || 'Customer',
     customerEmail: toString(customerDetails.email) || '',
     customerPhone: toString(customerDetails.phone) || '',
-    billingAddress: customerDetails.address,
-    shippingAddress: customerDetails.shippingAddress || customerDetails.address,
+    billingAddress: billingAddr,
+    shippingAddress: shippingAddr,
+    customerAddress: billingAddr, // Fallback
     items: products.map(product => ({
       name: toString(product.name) || 'Product',
       purity: toString(product.purity) || '22Karat',
@@ -158,6 +224,10 @@ async function generateOrderInvoicePDF(invoice, customerDetails, products, prici
       price: parseFloat(product.finalPrice) || parseFloat(product.price) || 0
     })),
     totalAmount: parseFloat(pricing.grandTotal) || 0,
+    totalMakingCharges: parseFloat(pricing.totalMakingCharges) || 0,
+    totalGST: parseFloat(pricing.totalGST) || 0,
+    totalDiscount: parseFloat(pricing.totalDiscount) || 0,
+    subtotal: parseFloat(pricing.subtotal) || 0,
     createdAt: invoice.createdAt || new Date()
   };
 
@@ -687,9 +757,14 @@ const getParticularOrderHistory = async (req, res) => {
 // Place Order
 const placeOrder = async (req, res) => {
   try {
-    const { items, totalAmount, deliveryAddress } = req.body;
+    const { items, totalAmount, deliveryAddress,name,phone,street,
+city,
+state,
+pincode,
+landmark, } = req.body;
 
-    console.log(req.body, req.user.id);
+    console.log(deliveryAddress, req.user.id,);
+    // console.log(deliveryAddress.name,deliveryAddress.phone,deliveryAddress.street,deliveryAddress.city,deliveryAddress.state,deliveryAddress.pincode,deliveryAddress.landmark,deliveryAddress.type);
     const orderId = `PGCOM-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 
     const order = new productOrder({
@@ -702,10 +777,36 @@ const placeOrder = async (req, res) => {
 
     await order.save();
 
+    // Parse delivery address - prioritize direct fields from req.body, then deliveryAddress object/string
+    // This needs to be outside try-catch blocks so it's accessible for both shipment and invoice creation
+    let parsedDeliveryAddress = null;
+    
+    // Try to parse deliveryAddress if it's a JSON string
+    if (deliveryAddress) {
+      if (typeof deliveryAddress === 'string') {
+        try {
+          parsedDeliveryAddress = JSON.parse(deliveryAddress);
+          console.log('✅ Parsed deliveryAddress JSON:', parsedDeliveryAddress);
+        } catch (e) {
+          // Not JSON, keep as string
+          console.log('⚠️ deliveryAddress is not valid JSON:', e.message);
+          parsedDeliveryAddress = null;
+        }
+      } else if (typeof deliveryAddress === 'object') {
+        parsedDeliveryAddress = deliveryAddress;
+        console.log('✅ Using deliveryAddress as object:', parsedDeliveryAddress);
+      }
+    }
+    
+    // Debug: Log what we have
+    console.log('📦 Address Fields from req.body:', { name, phone, street, city, state, pincode, landmark });
+    console.log('📦 Parsed deliveryAddress:', parsedDeliveryAddress);
+
+    // Get customer details once (used in both shipment and invoice creation)
+      const customer = await User.findById(req.user.id);
+
     // Automatically create shipment with BMC integration
     try {
-
-      const customer = await User.findById(req.user.id);
       if (customer) {
         console.log('🚀 Starting BMC shipment creation for order:', order.orderCode);
 
@@ -719,39 +820,59 @@ const placeOrder = async (req, res) => {
           };
         }));
 
-        // Parse delivery address
-        let addressData = {
-          addressLine1: deliveryAddress || "N/A",
-          addressLine2: "",
-          city: "Chennai",
-          state: "Tamil Nadu",
-          pincode: "600091",
-        };
-
-        // Try to parse if deliveryAddress is JSON string or structured
-        if (deliveryAddress && typeof deliveryAddress === 'object') {
-          addressData = {
-            addressLine1: deliveryAddress.street || deliveryAddress.addressLine1 || deliveryAddress.address || "N/A",
-            addressLine2: deliveryAddress.addressLine2 || "",
-            city: deliveryAddress.city || "N/A",
-            state: deliveryAddress.state || "N/A",
-            pincode: deliveryAddress.pincode || deliveryAddress.zipcode || "600091",
-          };
-        } else if (deliveryAddress && typeof deliveryAddress === 'string') {
-          try {
-            const parsed = JSON.parse(deliveryAddress);
-            addressData = {
-              addressLine1: parsed.street || parsed.addressLine1 || parsed.address || deliveryAddress,
-              addressLine2: parsed.addressLine2 || "",
-              city: parsed.city || "N/A",
-              state: parsed.state || "N/A",
-              pincode: parsed.pincode || parsed.zipcode || "000000",
-            };
-          } catch (e) {
-            // If not JSON, use as is
-            addressData.addressLine1 = deliveryAddress;
-          }
+        // Use direct fields from req.body first, then parsed deliveryAddress, then customer address
+        // Priority: req.body fields > parsedDeliveryAddress fields > customer address > defaults
+        let addressLine1 = street;
+        let addressLine2 = landmark;
+        let addressCity = city;
+        let addressState = state;
+        let addressPincode = pincode;
+        
+        // If req.body fields are missing, use parsedDeliveryAddress
+        if (!addressLine1 || addressLine1.trim() === '') {
+          addressLine1 = parsedDeliveryAddress?.street || parsedDeliveryAddress?.addressLine1 || parsedDeliveryAddress?.address || null;
         }
+        if (!addressLine2 || addressLine2.trim() === '') {
+          addressLine2 = parsedDeliveryAddress?.landmark || parsedDeliveryAddress?.addressLine2 || "";
+        }
+        if (!addressCity || addressCity.trim() === '') {
+          addressCity = parsedDeliveryAddress?.city || null;
+        }
+        if (!addressState || addressState.trim() === '') {
+          addressState = parsedDeliveryAddress?.state || null;
+        }
+        if (!addressPincode || addressPincode.trim() === '') {
+          addressPincode = parsedDeliveryAddress?.pincode || parsedDeliveryAddress?.zipcode || null;
+        }
+        
+        // Final fallback to customer address, then defaults
+        const addressData = {
+          addressLine1: addressLine1 || (customer.address && customer.address.length > 0 ? customer.address[0].street : null) || "N/A",
+          addressLine2: addressLine2 || "",
+          city: addressCity || (customer.address && customer.address.length > 0 ? customer.address[0].city : null) || "Chennai",
+          state: addressState || (customer.address && customer.address.length > 0 ? customer.address[0].state : null) || "Tamil Nadu",
+          pincode: addressPincode || (customer.address && customer.address.length > 0 ? customer.address[0].pincode : null) || "600091",
+        };
+        
+        // Final validation - ensure no undefined or empty required fields
+        if (!addressData.addressLine1 || addressData.addressLine1 === "N/A" || addressData.addressLine1.trim() === '') {
+          addressData.addressLine1 = "N/A";
+        }
+        if (!addressData.city || addressData.city.trim() === '') {
+          addressData.city = "Chennai";
+        }
+        if (!addressData.state || addressData.state.trim() === '') {
+          addressData.state = "Tamil Nadu";
+        }
+        if (!addressData.pincode || addressData.pincode.trim() === '') {
+          addressData.pincode = "600091";
+        }
+        
+        console.log('✅ Final addressData:', addressData);
+
+        // Use delivery person name and phone if provided, otherwise use customer details
+        const recipientName = name || parsedDeliveryAddress?.name || customer.name || "Customer";
+        const recipientPhone = phone || parsedDeliveryAddress?.phone || customer.phone || "0000000000";
 
         // Calculate total weight (estimate based on items)
         const estimatedWeight = orderItems.length * 0.5; // 0.5 kg per item average
@@ -769,8 +890,8 @@ const placeOrder = async (req, res) => {
           bmcResponse = await bmcService.createShipment({
             orderId: order._id.toString(),
             orderCode: order.orderCode,
-            customerName: customer.name || "Customer",
-            customerPhone: customer.phone || "0000000000",
+            customerName: recipientName, // Use delivery person name
+            customerPhone: recipientPhone, // Use delivery person phone
             customerEmail: customer.email || "",
             deliveryAddress: addressData,
             items: orderItems,
@@ -780,52 +901,64 @@ const placeOrder = async (req, res) => {
             packageCount: orderItems.length,
           });
 
-          if (bmcResponse.success) {
+          if (bmcResponse && bmcResponse.success) {
             trackingNumber = bmcResponse.awbNumber || bmcResponse.trackingNumber;
             console.log('✅ BMC Shipment Created - AWB:', trackingNumber);
           } else {
             console.log('⚠️ BMC API returned non-success:', bmcResponse);
             // Fall back to manual tracking number
             trackingNumber = `TRK-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+            bmcResponse = null; // Set to null to indicate failure
           }
         } catch (bmcError) {
           console.error('❌ BMC Shipment Creation Failed:', bmcError.message);
           // Fall back to manual tracking number
           trackingNumber = `TRK-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
           courierService = "Delhivery"; // Fallback courier
+          bmcResponse = null; // Ensure bmcResponse is null on error
         }
 
         // Calculate estimated delivery date (5-7 days from now)
         const estimatedDeliveryDate = new Date();
         estimatedDeliveryDate.setDate(estimatedDeliveryDate.getDate() + 6);
-
-        // Create shipment record in database
+        
+        // Create shipment record in database (matching Shipment model schema)
         const shipment = new Shipment({
           orderId: order._id,
           orderCode: order.orderCode,
           userId: req.user.id,
-          trackingNumber: trackingNumber,
-          courierService: courierService,
-          shippingAddress: {
-            recipientName: customer.name || "Customer",
-            phone: customer.phone || "N/A",
-            addressLine1: addressData.addressLine1,
-            addressLine2: addressData.addressLine2,
-            city: addressData.city,
-            state: addressData.state,
-            pincode: addressData.pincode,
-            country: "India",
+          docketNo: trackingNumber, // Use docketNo for tracking number
+          awbNo: trackingNumber, // Also store as awbNo
+          customerName: recipientName, // Use delivery person name (required)
+          customerPhone: recipientPhone, // Use delivery person phone (required)
+          customerEmail: customer.email || "",
+          deliveryAddress: {
+            addressLine1: addressData.addressLine1, // Required
+            addressLine2: addressData.addressLine2 || "",
+            city: addressData.city, // Required
+            state: addressData.state, // Required
+            pincode: addressData.pincode, // Required
+            landmark: landmark || parsedDeliveryAddress?.landmark || "",
           },
+          packageDetails: {
+            weight: estimatedWeight, // in KG
+            noOfPieces: orderItems.length,
+          },
+          items: orderItems.map(item => ({
+            productName: item.name,
+            quantity: item.quantity,
+            price: item.price,
+          })),
+          paymentMode: isCOD ? "COD" : "PREPAID",
+          codAmount: codAmount,
+          totalAmount: totalAmount, // Required
+          serviceType: "Express",
           status: "PENDING",
           estimatedDeliveryDate: estimatedDeliveryDate,
-          weight: estimatedWeight,
-          packageCount: orderItems.length,
-          codAmount: codAmount,
-          isCOD: isCOD,
           trackingHistory: [
             {
               status: "PENDING",
-              description: bmcResponse && bmcResponse.success
+              description: (bmcResponse && bmcResponse.success)
                 ? `Order placed successfully with ${courierService}. AWB: ${trackingNumber}`
                 : "Order placed successfully, shipment will be processed soon",
               timestamp: new Date(),
@@ -836,36 +969,152 @@ const placeOrder = async (req, res) => {
 
         await shipment.save();
         console.log('✅ Shipment record created in database:', shipment._id);
-
+        
+        // Call BVC tracking API to get DocketTrackList and update trackingHistory
+        // Use trackingNumber as docketNo if available
+        if (trackingNumber && trackingNumber.trim() !== '') {
+          try {
+            console.log('🔍 Calling BVC trackShipment for docket:', trackingNumber);
+            const trackingData = await bvcService.trackShipment(trackingNumber);
+            
+            if (trackingData && trackingData.success) {
+              // Update shipment with BVC tracking data
+              shipment.docketNo = trackingData.docketNo || trackingNumber;
+              shipment.bvcStatus = trackingData.status;
+              shipment.bvcTrackingCode = trackingData.statusCode;
+              
+              // Map BVC orderStatus to valid Shipment model status enum
+              // Shipment model accepts: PENDING, CREATED, PICKUP_SCHEDULED, PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, FAILED, RTO_INITIATED, RTO_IN_TRANSIT, RTO_DELIVERED, CANCELLED
+              const statusMap = {
+                'PICKUP_SCHEDULED': 'PICKUP_SCHEDULED',
+                'PICKED_UP': 'PICKED_UP',
+                'IN_TRANSIT': 'IN_TRANSIT',
+                'OUT_FOR_DELIVERY': 'OUT_FOR_DELIVERY',
+                'DELIVERED': 'DELIVERED',
+                'FAILED': 'FAILED',
+                'CANCELLED': 'CANCELLED',
+                'RTO_INITIATED': 'RTO_INITIATED',
+                'RTO_IN_TRANSIT': 'RTO_IN_TRANSIT',
+                'RTO_DELIVERED': 'RTO_DELIVERED',
+                'PROCESSING': 'CREATED', // Map PROCESSING to CREATED
+                'PENDING': 'PENDING',
+                'CREATED': 'CREATED',
+              };
+              
+              const mappedStatus = trackingData.orderStatus 
+                ? (statusMap[trackingData.orderStatus] || shipment.status)
+                : shipment.status;
+              
+              // Only update if mapped status is valid for Shipment model
+              const validStatuses = ['PENDING', 'CREATED', 'PICKUP_SCHEDULED', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED', 'RTO_INITIATED', 'RTO_IN_TRANSIT', 'RTO_DELIVERED', 'CANCELLED'];
+              if (validStatuses.includes(mappedStatus)) {
+                shipment.status = mappedStatus;
+              } else {
+                console.warn(`⚠️ Invalid status from BVC: ${trackingData.orderStatus}, keeping current status: ${shipment.status}`);
+              }
+              
+              // Add DocketTrackList to trackingHistory
+              if (trackingData.trackingHistory && trackingData.trackingHistory.length > 0) {
+                // Merge with existing tracking history (avoid duplicates)
+                const existingHistory = shipment.trackingHistory || [];
+                const newHistoryEntries = trackingData.trackingHistory.map((entry) => ({
+                  status: entry.status,
+                  statusCode: entry.statusCode,
+                  description: entry.status,
+                  location: entry.city || '',
+                  city: entry.city || '',
+                  timestamp: entry.timestamp ? new Date(entry.timestamp) : new Date(),
+                  updatedBy: 'BVC System',
+                }));
+                
+                // Combine and remove duplicates based on timestamp and status
+                const combinedHistory = [...existingHistory, ...newHistoryEntries];
+                const uniqueHistory = combinedHistory.filter((entry, index, self) => 
+                  index === self.findIndex((e) => 
+                    e.timestamp?.getTime() === entry.timestamp?.getTime() && 
+                    e.status === entry.status
+                  )
+                );
+                
+                // Sort by timestamp (oldest first)
+                uniqueHistory.sort((a, b) => {
+                  const timeA = a.timestamp?.getTime() || 0;
+                  const timeB = b.timestamp?.getTime() || 0;
+                  return timeA - timeB;
+                });
+                
+                shipment.trackingHistory = uniqueHistory;
+              }
+              
+              // Store raw BVC tracking response
+              shipment.bvcTrackResponse = trackingData.rawResponse;
+              
+              await shipment.save();
+              console.log('✅ Shipment tracking history updated from BVC');
+              
+              // Update order status with DocketStatus
+              if (trackingData.orderStatus) {
+                // Map BVC order status to order model status enum
+                // Order model accepts: PLACED, CONFIRMED, SHIPPED, DELIVERED, RETURNED, REFUNDED, RETURN_IN_PROGRESS, REFUND_IN_PROGRESS
+                const statusMap = {
+                  'PICKUP_SCHEDULED': 'CONFIRMED',
+                  'PICKED_UP': 'CONFIRMED',
+                  'IN_TRANSIT': 'SHIPPED',
+                  'OUT_FOR_DELIVERY': 'SHIPPED',
+                  'DELIVERED': 'DELIVERED',
+                  'FAILED': 'FAILED',
+                  'CANCELLED': 'CANCELLED',
+                  'RTO_INITIATED': 'RETURN_IN_PROGRESS',
+                  'RTO_IN_TRANSIT': 'RETURN_IN_PROGRESS',
+                  'RTO_DELIVERED': 'RETURNED',
+                  'PROCESSING': 'CONFIRMED',
+                };
+                
+                const mappedStatus = statusMap[trackingData.orderStatus] || order.status;
+                // Only update if the mapped status is valid for the order model
+                const validStatuses = ['PLACED', 'CONFIRMED', 'SHIPPED', 'DELIVERED', 'FAILED','CANCELLED','RETURNED', 'REFUNDED', 'RETURN_IN_PROGRESS', 'REFUND_IN_PROGRESS'];
+                if (validStatuses.includes(mappedStatus) && mappedStatus !== order.status) {
+                  order.status = mappedStatus;
+                  await order.save();
+                  console.log(`✅ Order status updated to: ${mappedStatus} (from BVC status: ${trackingData.status}, orderStatus: ${trackingData.orderStatus})`);
+                }
+              }
+            } else {
+              console.log('⚠️ BVC tracking returned non-success, skipping update');
+            }
+          } catch (trackingError) {
+            console.error('❌ Error calling BVC trackShipment:', trackingError.message);
+            // Don't fail the order if tracking fails - it's optional
+          }
+        } else {
+          console.log('⚠️ No tracking number available, skipping BVC tracking');
+        }
+    
         // Update order with shipment reference (optional)
         order.shipmentId = shipment._id;
         await order.save();
       }
     } catch (shipmentError) {
       console.error('❌ Error in shipment creation flow:', shipmentError);
-      // Don't fail the order if shipment creation fails
-      // Order is still valid, shipment can be created manually later
     }
 
     // Automatically create invoice for the order
     try {
       const Invoice = require('../models/invoice_model');
-      const User = require('../models/userModel');
       const Product = require('../models/product_model');
 
-      // Get customer details
-      const customer = await User.findById(req.user.id);
+      // Use customer already fetched above (customer is defined in outer scope)
       if (customer) {
-        // Prepare customer details
+        // Prepare customer details - use delivery person details if provided, otherwise customer details
         const customerDetails = {
-          name: customer.name || 'N/A',
+          name: name || parsedDeliveryAddress?.name || customer.name || 'N/A',
           email: customer.email,
-          phone: customer.phone || 'N/A',
-          address: customer.address && customer.address.length > 0 ? customer.address[0] : {
-            street: 'N/A',
-            city: 'N/A',
-            state: 'N/A',
-            pincode: 'N/A'
+          phone: phone || parsedDeliveryAddress?.phone || customer.phone || 'N/A',
+          address: {
+            street: street || parsedDeliveryAddress?.street || (customer.address && customer.address.length > 0 ? customer.address[0].street : 'N/A'),
+            city: city || parsedDeliveryAddress?.city || (customer.address && customer.address.length > 0 ? customer.address[0].city : 'N/A'),
+            state: state || parsedDeliveryAddress?.state || (customer.address && customer.address.length > 0 ? customer.address[0].state : 'N/A'),
+            pincode: pincode || parsedDeliveryAddress?.pincode || (customer.address && customer.address.length > 0 ? customer.address[0].pincode : 'N/A')
           }
         };
 
@@ -991,21 +1240,116 @@ const placeOrder = async (req, res) => {
         const totalMakingCharges = products.reduce((sum, p) => sum + (p.makingCharges || 0), 0);
         const subtotal = products.reduce((sum, p) => sum + (p.goldValue || 0), 0);
 
-        // Generate invoice number
-        const invoiceCount = await Invoice.countDocuments();
-        const year = new Date().getFullYear();
-        const month = String(new Date().getMonth() + 1).padStart(2, '0');
-        const day = String(new Date().getDate()).padStart(2, '0');
-        const sequence = String(invoiceCount + 1).padStart(4, '0');
-        const invoiceNumber = `INV-${year}${month}${day}-${sequence}`;
+        // Generate invoice number in format: PGINV/2025-26/00001
+        // Financial year: April to March (e.g., 2025-26 = April 2025 to March 2026)
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1; // 1-12
+        
+        // Financial year starts in April (month 4)
+        let financialYearStart, financialYearEnd;
+        if (currentMonth >= 4) {
+          // April to December: Current year to next year
+          financialYearStart = currentYear;
+          financialYearEnd = currentYear + 1;
+        } else {
+          // January to March: Previous year to current year
+          financialYearStart = currentYear - 1;
+          financialYearEnd = currentYear;
+        }
+        
+        const financialYear = `${financialYearStart}-${String(financialYearEnd).slice(-2)}`;
+        
+        // Count invoices for current financial year
+        const financialYearStartDate = new Date(financialYearStart, 3, 1); // April 1
+        const financialYearEndDate = new Date(financialYearEnd, 2, 31, 23, 59, 59); // March 31
+        
+        const invoiceCount = await Invoice.countDocuments({
+          createdAt: {
+            $gte: financialYearStartDate,
+            $lte: financialYearEndDate
+          }
+        });
+        
+        const sequence = String(invoiceCount + 1).padStart(5, '0');
+        const invoiceNumber = `PGINV/${financialYear}/${sequence}`;
 
-        // Create invoice
+        // Get shipping address from order with delivery person details
+        const shippingAddressData = {
+          name: name || parsedDeliveryAddress?.name || customerDetails.name,
+          phone: phone || parsedDeliveryAddress?.phone || customerDetails.phone,
+          street: street || parsedDeliveryAddress?.street || parsedDeliveryAddress?.addressLine1 || parsedDeliveryAddress?.address || customerDetails.address.street || 'N/A',
+          city: city || parsedDeliveryAddress?.city || customerDetails.address.city || 'N/A',
+          state: state || parsedDeliveryAddress?.state || customerDetails.address.state || 'N/A',
+          pincode: pincode || parsedDeliveryAddress?.pincode || parsedDeliveryAddress?.zipcode || customerDetails.address.pincode || 'N/A',
+          landmark: landmark || parsedDeliveryAddress?.landmark || parsedDeliveryAddress?.addressLine2 || ''
+        };
+        // let shippingAddressData = customerDetails.address;
+        // if (deliveryAddress && typeof deliveryAddress === 'object') {
+        //   shippingAddressData = {
+        //     name: customerDetails.name,
+        //     phone: customerDetails.phone,
+        //     street: deliveryAddress.street || deliveryAddress.addressLine1 || deliveryAddress.address || 'N/A',
+        //     city: deliveryAddress.city || 'N/A',
+        //     state: deliveryAddress.state || 'N/A',
+        //     pincode: deliveryAddress.pincode || deliveryAddress.zipcode || 'N/A',
+        //     landmark: deliveryAddress.landmark || deliveryAddress.addressLine2 || ''
+        //   };
+        // } else if (deliveryAddress && typeof deliveryAddress === 'string') {
+        //   // Try to parse if it's JSON string
+        //   try {
+        //     const parsed = JSON.parse(deliveryAddress);
+        //     shippingAddressData = {
+        //       name: customerDetails.name,
+        //       phone: customerDetails.phone,
+        //       street: parsed.street || parsed.addressLine1 || parsed.address || deliveryAddress,
+        //       city: parsed.city || 'N/A',
+        //       state: parsed.state || 'N/A',
+        //       pincode: parsed.pincode || parsed.zipcode || 'N/A',
+        //       landmark: parsed.landmark || parsed.addressLine2 || ''
+        //     };
+        //   } catch (e) {
+        //     // If not JSON, use as street address
+        //     shippingAddressData = {
+        //       name: customerDetails.name,
+        //       phone: customerDetails.phone,
+        //       street: deliveryAddress,
+        //       city: customerDetails.address.city || 'N/A',
+        //       state: customerDetails.address.state || 'N/A',
+        //       pincode: customerDetails.address.pincode || 'N/A',
+        //       landmark: ''
+        //     };
+        //   }
+        // }
+
+        // Create invoice with complete data (same as what's sent in email)
         const invoice = new Invoice({
           invoiceNumber,
           orderId: order._id,
           customerId: req.user.id,
-          customerDetails,
-          products,
+          customerDetails: {
+            name: customerDetails.name, // Use delivery person name or customer name
+            email: customerDetails.email,
+            phone: customerDetails.phone, // Use delivery person phone or customer phone
+            address: customerDetails.address // Billing address
+          },
+          products: products.map(p => ({
+            productId: p.productId,
+            name: p.name,
+            sku: p.sku,
+            category: p.category,
+            brand: p.brand,
+            quantity: p.quantity,
+            unitPrice: p.unitPrice,
+            totalPrice: p.totalPrice,
+            weight: p.weight,
+            metalType: p.metalType,
+            purity: p.purity,
+            makingCharges: p.makingCharges || 0, // Save making charges
+            gst: p.gst || 0, // Save GST
+            discount: p.discount || 0, // Save discount
+            finalPrice: p.finalPrice
+          })),
           pricing: {
             subtotal,
             totalMakingCharges,
@@ -1021,15 +1365,15 @@ const placeOrder = async (req, res) => {
           },
           shippingDetails: {
             method: 'standard',
-            shippingAddress: customerDetails.address
+            shippingAddress: shippingAddressData // Save shipping address
           },
-          status: 'draft',
+          status: 'sent', // Mark as sent since it's being emailed
           createdBy: req.user.id, // Using user ID as admin for now
           dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days from now
         });
 
         await invoice.save();
-        console.log('Invoice created automatically for order:', order._id);
+        console.log('✅ Invoice created and saved to database:', invoice.invoiceNumber);
 
         // Send order confirmation email with invoice PDF
         try {
@@ -1068,6 +1412,27 @@ const placeOrder = async (req, res) => {
     } catch (invoiceError) {
       console.error('Error creating automatic invoice:', invoiceError);
       // Don't fail the order if invoice creation fails
+    }
+
+    // Send WhatsApp message to user
+    try {
+      if (customer && customer.phone) {
+        const Invoice = require('../models/invoice_model');
+        const invoice = await Invoice.findOne({ orderId: order._id });
+        const invoiceNumber = invoice ? invoice.invoiceNumber : 'N/A';
+        
+        await sendWhatsAppMessage(
+          customer.phone,
+          order.orderCode,
+          invoiceNumber,
+          totalAmount
+        );
+      } else {
+        console.log('⚠️ Customer phone not available, skipping WhatsApp message');
+      }
+    } catch (whatsappError) {
+      console.error('❌ Error sending WhatsApp message:', whatsappError);
+      // Don't fail the order if WhatsApp fails
     }
 
     res.status(201).json({ success: true, message: "Order placed", order });
@@ -1263,7 +1628,6 @@ const getOrderHistory = async (req, res) => {
   console.log(req.user.id);
   try {
     const orders = await productOrder.find({ user: req.user.id }).sort({ createdAt: -1 }).populate("items.productDataid");
-    console.log("req.user.id", orders);
     res.json({ success: true, orders });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -2481,6 +2845,95 @@ const getTotalInvestmentOrders = (async (req, res) => {
   }
 });
 
+// ==========================
+// SEND WHATSAPP MESSAGE API
+// ==========================
+const sendOrderWhatsAppMessage = async (req, res) => {
+  try {
+    const { orderCode, orderId, phoneNumber } = req.body;
+
+    // // Validate input
+    // if (!orderCode && !orderId) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "Either orderCode or orderId is required"
+    //   });
+    // }
+
+    // // Find the order
+    // let order = null;
+    // if (orderCode) {
+    //   order = await productOrder.findOne({ orderCode });
+    // } else if (orderId) {
+    //   order = await productOrder.findById(orderId);
+    // }
+
+    // if (!order) {
+    //   return res.status(404).json({
+    //     success: false,
+    //     message: "Order not found"
+    //   });
+    // }
+
+    // // Get customer details
+    // const customer = await User.findById(order.user);
+    // if (!customer) {
+    //   return res.status(404).json({
+    //     success: false,
+    //     message: "Customer not found for this order"
+    //   });
+    // }
+
+    // Use provided phone number or customer's phone
+    // const recipientPhone = phoneNumber || customer.phone;
+    // if (!recipientPhone) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "Phone number is required. Please provide phoneNumber in request or ensure customer has a phone number."
+    //   });
+    // }
+
+    // // Find invoice for this order
+    // const Invoice = require('../models/invoice_model');
+    // const invoice = await Invoice.findOne({ orderId: order._id });
+    // const invoiceNumber = invoice ? invoice.invoiceNumber : 'N/A';
+
+    // Send WhatsApp message
+    const result = await sendWhatsAppMessage(
+      "+917092053592",
+      "PGCOM-1764065481098-94200",
+      "1764065481098-94200",
+       0
+    );
+
+    if (result.success) {
+      return res.status(200).json({
+        success: true,
+        message: "WhatsApp message sent successfully",
+        // data: {
+        //   orderCode: order.orderCode,
+        //   invoiceNumber: invoiceNumber,
+        //   phoneNumber: recipientPhone,
+        //   messageSid: result.messageSid
+        // }
+      });
+    } else {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send WhatsApp message",
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error in sendOrderWhatsAppMessage:', error);
+    return res.status(500).json({
+      success: false,
+      message: "Error sending WhatsApp message",
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   placeOrder, returnOrder, refundOrder, createReturnRefundRequest, getOrderHistory,generateTokenPhonePe,createOrderPhonePe,checkPhonePeOrderStatus,
   buyOrSellGold,
@@ -2498,5 +2951,6 @@ module.exports = {
   getUserReturnRefundHistory,
   getInvestmentOrdersByMonth,
   getTotalRevenue,
-  getTotalInvestmentOrders
+  getTotalInvestmentOrders,
+  sendOrderWhatsAppMessage
 };

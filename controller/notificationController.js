@@ -509,35 +509,64 @@ const updateNotificationPreferences = async (req, res) => {
 const getNotificationHistory = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { page = 1, limit = 20, type, status } = req.query;
+    const { page = 1, limit = 50, type, status } = req.query;
     
+    // Build query to get all notifications visible to this user:
+    // 1. General notifications (targetAudience: 'all')
+    // 2. User-specific notifications (userId in targetUsers array)
+    // 3. Segment-based notifications (for now, include all segments - can be refined later)
     const query = { 
       $or: [
+        // General notifications for all users
         { targetAudience: 'all' },
-        { targetUsers: userId },
-        { targetSegment: { $exists: true } }
-      ]
+        // User-specific notifications where this user is in the targetUsers array
+        { targetUsers: { $in: [userId] } },
+        // Segment-based notifications (include all for now)
+        { 
+          targetAudience: 'user_segment',
+          targetSegment: { $exists: true, $ne: null }
+        }
+      ],
+      // Only show sent notifications (not drafts or cancelled)
+      status: { $in: ['sent', 'scheduled'] }
     };
     
     if (type) query.type = type;
-    if (status) query.status = status;
+    if (status) {
+      // Override status filter if provided
+      query.status = status;
+    }
     
     const notifications = await Notification.find(query)
       .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit))
       .populate('createdBy', 'name email')
+      .populate('targetUsers', 'name email')
       .lean();
+    
+    // Add read status for each notification based on readBy array
+    const notificationsWithReadStatus = notifications.map(notification => {
+      const notificationId = notification._id.toString();
+      const readByArray = notification.readBy || [];
+      const isRead = readByArray.some(id => id.toString() === userId.toString());
+      
+      return {
+        ...notification,
+        isRead: isRead,
+        readAt: isRead ? (notification.readAt || notification.updatedAt) : null
+      };
+    });
     
     const total = await Notification.countDocuments(query);
     
     res.status(200).json({
       status: true,
       data: {
-        notifications,
+        notifications: notificationsWithReadStatus,
         pagination: {
           current: parseInt(page),
-          pages: Math.ceil(total / limit),
+          pages: Math.ceil(total / parseInt(limit)),
           total
         }
       }

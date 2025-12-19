@@ -449,21 +449,48 @@ console.log(`Subtotal (before discount): ${subtotal}`);
 
 /**
  * Update all product prices when gold/silver prices change
+ * Uses appropriate gold price based on product's selectedCaret (24K, 22K, 18K)
  */
-const updateAllProductPrices = async (goldPrice, silverPrice, makingChargesPercentage = 15) => {
+const updateAllProductPrices = async (goldPrice24kt, goldPrice22kt, goldPrice18kt, silverPrice, makingChargesPercentage = 15) => {
   try {
-    console.log(`Updating product prices with Gold: ₹${goldPrice}, Silver: ₹${silverPrice}`);
+    console.log(`Updating product prices with Gold 24kt: ₹${goldPrice24kt}, Gold 22kt: ₹${goldPrice22kt}, Gold 18kt: ₹${goldPrice18kt}, Silver: ₹${silverPrice}`);
     
     const products = await Product.find({ active: true });
     let updatedCount = 0;
     let errorCount = 0;
+    let count24kt = 0;
+    let count22kt = 0;
+    let count18kt = 0;
+    let countNoCaret = 0;
 
     for (const product of products) {
       try {
-        const priceCalculation = calculateProductPrice(product, goldPrice, silverPrice, makingChargesPercentage);
+        // Determine which gold price to use based on selectedCaret
+        let selectedGoldPrice = goldPrice24kt; // Default to 24kt
+        const caret = (product.selectedCaret || '').toString().toUpperCase().trim();
+        
+        if (caret.includes('24') || caret === '24K' || caret === '24KT') {
+          selectedGoldPrice = goldPrice24kt;
+          count24kt++;
+        } else if (caret.includes('22') || caret === '22K' || caret === '22KT') {
+          selectedGoldPrice = goldPrice22kt || goldPrice24kt; // Fallback to 24kt if 22kt not set
+          count22kt++;
+        } else if (caret.includes('18') || caret === '18K' || caret === '18KT') {
+          selectedGoldPrice = goldPrice18kt || goldPrice24kt; // Fallback to 24kt if 18kt not set
+          count18kt++;
+        } else {
+          // No caret specified or unknown caret - default to 24kt
+          selectedGoldPrice = goldPrice24kt;
+          countNoCaret++;
+          console.log(`⚠️ Product ${product.name} has no valid selectedCaret (${caret}), using 24kt price`);
+        }
+
+        console.log(`Processing ${product.name} - Caret: ${caret || 'N/A'}, Using Gold Price: ₹${selectedGoldPrice}`);
+
+        const priceCalculation = calculateProductPrice(product, selectedGoldPrice, silverPrice, makingChargesPercentage);
         // Use the updated price details from the calculation (preserves existing structure)
         const updatedPriceDetails = priceCalculation.breakdown;
-console.log(`Updated Price Details for ${priceCalculation.sellingprice}:`, updatedPriceDetails);
+        console.log(`Updated Price Details for ${priceCalculation.sellingprice}:`, updatedPriceDetails);
         // Update the product
         await Product.findByIdAndUpdate(product._id, {
           priceDetails: updatedPriceDetails,
@@ -476,7 +503,7 @@ console.log(`Updated Price Details for ${priceCalculation.sellingprice}:`, updat
         });
 
         updatedCount++;
-        console.log(`Updated product: ${product.name} - Final Price: ₹${priceCalculation.sellingprice}`);
+        console.log(`Updated product: ${product.name} (${caret || 'N/A'}) - Final Price: ₹${priceCalculation.sellingprice}`);
 
       } catch (error) {
         console.error(`Error updating product ${product.name}:`, error);
@@ -489,7 +516,13 @@ console.log(`Updated Price Details for ${priceCalculation.sellingprice}:`, updat
       totalProducts: products.length,
       updatedCount: updatedCount,
       errorCount: errorCount,
-      message: `Updated ${updatedCount} products successfully. ${errorCount} errors occurred.`
+      caretBreakdown: {
+        '24kt': count24kt,
+        '22kt': count22kt,
+        '18kt': count18kt,
+        'noCaret': countNoCaret
+      },
+      message: `Updated ${updatedCount} products successfully. ${errorCount} errors occurred. (24kt: ${count24kt}, 22kt: ${count22kt}, 18kt: ${count18kt}, No Caret: ${countNoCaret})`
     };
 
   } catch (error) {
@@ -500,23 +533,42 @@ console.log(`Updated Price Details for ${priceCalculation.sellingprice}:`, updat
 
 /**
  * Update a single product price
+ * Uses appropriate gold price based on product's selectedCaret (24K, 22K, 18K)
  */
-const updateSingleProductPrice = async (productId, goldPrice, silverPrice, makingChargesPercentage = 15) => {
+const updateSingleProductPrice = async (productId, goldPrice24kt, goldPrice22kt, goldPrice18kt, silverPrice, makingChargesPercentage = 15) => {
   try {
     const product = await Product.findById(productId);
     if (!product) {
       throw new Error('Product not found');
     }
 
-    const priceCalculation = calculateProductPrice(product, goldPrice, silverPrice, makingChargesPercentage);
+    // Determine which gold price to use based on selectedCaret
+    let selectedGoldPrice = goldPrice24kt; // Default to 24kt
+    const caret = (product.selectedCaret || '').toString().toUpperCase().trim();
+    
+    if (caret.includes('24') || caret === '24K' || caret === '24KT') {
+      selectedGoldPrice = goldPrice24kt;
+    } else if (caret.includes('22') || caret === '22K' || caret === '22KT') {
+      selectedGoldPrice = goldPrice22kt || goldPrice24kt; // Fallback to 24kt if 22kt not set
+    } else if (caret.includes('18') || caret === '18K' || caret === '18KT') {
+      selectedGoldPrice = goldPrice18kt || goldPrice24kt; // Fallback to 24kt if 18kt not set
+    } else {
+      // No caret specified or unknown caret - default to 24kt
+      selectedGoldPrice = goldPrice24kt;
+      console.log(`⚠️ Product ${product.name} has no valid selectedCaret (${caret}), using 24kt price`);
+    }
+
+    console.log(`Updating single product: ${product.name} - Caret: ${caret || 'N/A'}, Using Gold Price: ₹${selectedGoldPrice}`);
+
+    const priceCalculation = calculateProductPrice(product, selectedGoldPrice, silverPrice, makingChargesPercentage);
     
     // Use the updated price details from the calculation (preserves existing structure)
-    const updatedPriceDetails = priceCalculation.updatedPriceDetails;
+    const updatedPriceDetails = priceCalculation.breakdown;
 
     // Update the product
     const updatedProduct = await Product.findByIdAndUpdate(productId, {
       priceDetails: updatedPriceDetails,
-      sellingprice: priceCalculation.finalPrice,
+      sellingprice: priceCalculation.sellingprice,
       lastPriceUpdate: new Date()
     }, { new: true });
 
@@ -524,7 +576,9 @@ const updateSingleProductPrice = async (productId, goldPrice, silverPrice, makin
       success: true,
       product: updatedProduct,
       priceCalculation: priceCalculation,
-      message: `Product ${product.name} price updated successfully`
+      caretUsed: caret || 'N/A',
+      goldPriceUsed: selectedGoldPrice,
+      message: `Product ${product.name} price updated successfully using ${caret || '24kt'} gold price`
     };
 
   } catch (error) {
@@ -544,7 +598,10 @@ const getCurrentPrices = async () => {
     }
     
     return {
-      goldPrice: settings.goldRate,
+      goldPrice: settings.goldRate24kt || settings.goldRate, // Backward compatibility
+      goldPrice24kt: settings.goldRate24kt || settings.goldRate,
+      goldPrice22kt: settings.goldRate22kt || null,
+      goldPrice18kt: settings.goldRate18kt || null,
       silverPrice: settings.silverRate,
       goldStatus: settings.goldStatus,
       silverStatus: settings.silverStatus

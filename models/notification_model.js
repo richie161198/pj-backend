@@ -80,6 +80,14 @@ const notificationSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  readBy: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  deliveredTo: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Admin',

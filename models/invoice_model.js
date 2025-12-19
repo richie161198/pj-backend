@@ -201,16 +201,43 @@ invoiceSchema.index({ 'customerDetails.email': 1 });
 invoiceSchema.pre('save', async function(next) {
   if (this.isNew && !this.invoiceNumber) {
     try {
-      const count = await this.constructor.countDocuments();
-      const year = new Date().getFullYear();
-      const month = String(new Date().getMonth() + 1).padStart(2, '0');
-      const day = String(new Date().getDate()).padStart(2, '0');
-      const sequence = String(count + 1).padStart(4, '0');
-      this.invoiceNumber = `INV-${year}${month}${day}-${sequence}`;
+      // Generate invoice number in format: PGINV/2025-26/00001
+      // Financial year: April to March (e.g., 2025-26 = April 2025 to March 2026)
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1; // 1-12
+      
+      // Financial year starts in April (month 4)
+      let financialYearStart, financialYearEnd;
+      if (currentMonth >= 4) {
+        // April to December: Current year to next year
+        financialYearStart = currentYear;
+        financialYearEnd = currentYear + 1;
+      } else {
+        // January to March: Previous year to current year
+        financialYearStart = currentYear - 1;
+        financialYearEnd = currentYear;
+      }
+      
+      const financialYear = `${financialYearStart}-${String(financialYearEnd).slice(-2)}`;
+      
+      // Count invoices for current financial year
+      const financialYearStartDate = new Date(financialYearStart, 3, 1); // April 1
+      const financialYearEndDate = new Date(financialYearEnd, 2, 31, 23, 59, 59); // March 31
+      
+      const invoiceCount = await this.constructor.countDocuments({
+        createdAt: {
+          $gte: financialYearStartDate,
+          $lte: financialYearEndDate
+        }
+      });
+      
+      const sequence = String(invoiceCount + 1).padStart(5, '0');
+      this.invoiceNumber = `PGINV/${financialYear}/${sequence}`;
     } catch (error) {
       console.error('Error generating invoice number:', error);
       // Fallback to timestamp-based number
-      this.invoiceNumber = `INV-${Date.now()}`;
+      this.invoiceNumber = `PGINV/${new Date().getFullYear()}-${String(new Date().getFullYear() + 1).slice(-2)}/${Date.now()}`;
     }
   }
   next();

@@ -232,26 +232,64 @@ const deleteAddress = asyncHandler(async (req, res) => {
 const updateAddress = asyncHandler(async (req, res) => {
   try {
     const { addressId } = req.params;
-
-    // const user = await User.findByIdAndUpdate(
-    //   req.user.id,
-    //   { $pull: { address: { _id: addressId } } },
-    //   { new: true }
-    // );
+    const { name, phone, street, city, state, pincode, type, landmark, isDefault } = req.body;
 
     const user = await User.findById(req.user.id);
-    console.log(user.address);
-    const addressIddd = await user.address.findById(addressId);
-    console.log(addressIddd);
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        message: "User not found" 
+      });
+    }
 
-    if (!user) return res.status(404).json({ message: "User not found" });
+    // Find the address index in the array
+    const addressIndex = user.address.findIndex(
+      (addr) => addr._id.toString() === addressId
+    );
+
+    if (addressIndex === -1) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Address not found" 
+      });
+    }
+
+    // If setting as default, unset all other addresses as default
+    if (isDefault === true || isDefault === "true") {
+      user.address.forEach((addr) => {
+        addr.isDefault = false;
+      });
+    }
+
+    // Update the address fields
+    if (name) user.address[addressIndex].name = name;
+    if (phone) user.address[addressIndex].phone = phone;
+    if (street) user.address[addressIndex].street = street;
+    if (city) user.address[addressIndex].city = city;
+    if (state) user.address[addressIndex].state = state;
+    if (pincode) user.address[addressIndex].pincode = pincode;
+    if (type) user.address[addressIndex].type = type;
+    if (landmark !== undefined) user.address[addressIndex].landmark = landmark;
+    if (isDefault !== undefined) {
+      user.address[addressIndex].isDefault = isDefault === true || isDefault === "true";
+    }
+
+    // Save the user document
+    await user.save();
 
     res.status(200).json({
-      message: "Address deleted successfully",
+      success: true,
+      message: "Address updated successfully",
+      address: user.address[addressIndex],
       addresses: user.address,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("Update Address Error:", err);
+    res.status(500).json({ 
+      success: false,
+      error: err.message,
+      message: "Error updating address"
+    });
   }
 });
 

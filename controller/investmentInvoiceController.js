@@ -826,23 +826,25 @@ const downloadInvoicePDF = asyncHandler(async (req, res) => {
     }
 
     // Generate PDF using pdfmake
+    // Map invoice fields correctly: amount -> baseAmount, totalInvoiceValue -> totalAmount
     const pdfInvoiceData = {
       invoiceNumber: invoice.invoiceNumber,
       orderId: invoice.orderId,
       orderType: invoice.orderType,
       transactionType: invoice.transactionType,
-      customerName: invoice.userId?.name || invoice.customer?.name || 'Customer',
-      customerEmail: invoice.userId?.email || invoice.customer?.email || '',
-      customerPhone: invoice.userId?.phone || invoice.customer?.phone || '',
+      customerName: invoice.userId?.name || invoice.customerName || 'Customer',
+      customerEmail: invoice.userId?.email || invoice.customerEmail || '',
+      customerPhone: invoice.userId?.phone || invoice.customerPhone || '',
       quantity: invoice.quantity,
       ratePerGram: invoice.ratePerGram,
-      baseAmount: invoice.baseAmount,
-      gstRate: invoice.gstRate,
-      gstAmount: invoice.gstAmount,
-      totalAmount: invoice.totalAmount,
-      paymentMethod: invoice.paymentMethod,
-      newBalance: invoice.newBalance,
-      createdAt: invoice.createdAt
+      baseAmount: invoice.amount || 0, // Use 'amount' field from model (base amount without GST)
+      gstRate: invoice.gstRate || 0,
+      gstAmount: invoice.gstAmount || 0,
+      totalAmount: invoice.totalInvoiceValue || 0, // Use 'totalInvoiceValue' field from model (final amount with GST)
+      paymentMethod: invoice.paymentMethod || 'UPI',
+      newBalance: invoice.newBalance || null, // May not exist for all invoices
+      newINRBalance: invoice.newINRBalance || null, // May not exist for all invoices
+      createdAt: invoice.createdAt || invoice.invoiceDate
     };
 
     const pdfBuffer = await generateInvestmentInvoicePdf(pdfInvoiceData);
@@ -875,23 +877,25 @@ const downloadInvoiceByOrderId = asyncHandler(async (req, res) => {
     }
 
     // Generate PDF using pdfmake
+    // Map invoice fields correctly: amount -> baseAmount, totalInvoiceValue -> totalAmount
     const pdfInvoiceData = {
       invoiceNumber: invoice.invoiceNumber,
       orderId: invoice.orderId,
       orderType: invoice.orderType,
       transactionType: invoice.transactionType,
-      customerName: invoice.userId?.name || invoice.customer?.name || 'Customer',
-      customerEmail: invoice.userId?.email || invoice.customer?.email || '',
-      customerPhone: invoice.userId?.phone || invoice.customer?.phone || '',
+      customerName: invoice.userId?.name || invoice.customerName || 'Customer',
+      customerEmail: invoice.userId?.email || invoice.customerEmail || '',
+      customerPhone: invoice.userId?.phone || invoice.customerPhone || '',
       quantity: invoice.quantity,
       ratePerGram: invoice.ratePerGram,
-      baseAmount: invoice.baseAmount,
-      gstRate: invoice.gstRate,
-      gstAmount: invoice.gstAmount,
-      totalAmount: invoice.totalAmount,
-      paymentMethod: invoice.paymentMethod,
-      newBalance: invoice.newBalance,
-      createdAt: invoice.createdAt
+      baseAmount: invoice.amount || 0, // Use 'amount' field from model (base amount without GST)
+      gstRate: invoice.gstRate || 0,
+      gstAmount: invoice.gstAmount || 0,
+      totalAmount: invoice.totalInvoiceValue || 0, // Use 'totalInvoiceValue' field from model (final amount with GST)
+      paymentMethod: invoice.paymentMethod || 'UPI',
+      newBalance: invoice.newBalance || null, // May not exist for all invoices
+      newINRBalance: invoice.newINRBalance || null, // May not exist for all invoices
+      createdAt: invoice.createdAt || invoice.invoiceDate
     };
 
     const pdfBuffer = await generateInvestmentInvoicePdf(pdfInvoiceData);

@@ -457,6 +457,7 @@ app.use("/api/v0/invoices", require("./routers/invoiceRouter"));
 app.use("/api/v0/investment-invoices", require("./routers/investmentInvoiceRouter"));
 app.use("/api/v0/banners", require("./routers/bannerRouter"));
 app.use("/api/v0/shipments", require("./routers/shipmentRouter"));
+app.use("/api/v0/autopay", require("./routers/autopayRouter"));
 
 // Debug endpoint for investment invoices
 app.get("/debug-invoice/:orderId", async (req, res) => {

@@ -19,7 +19,9 @@ router.route("/deleteuserById/:id").post(deleteuserById);
 router.post("/set-transaction-pin", isAuth, setTransactionPin);
 router.post("/verify-transaction-pin", isAuth, verifyTransactionPin);
 router.route("/addAddress").post(isAuth, addAddress);
-router.route("/updateAddress/:addressId").post(isAuth, updateAddress);
+// Support both PUT and POST for updateAddress
+router.put("/updateAddress/:addressId", isAuth, updateAddress);
+router.post("/updateAddress/:addressId", isAuth, updateAddress); // Keep POST for backward compatibility
 router.route("/deleteAddress").delete(isAuth, deleteAddress);
 router.route("/getAddress").get(isAuth, getAddresses);
 
