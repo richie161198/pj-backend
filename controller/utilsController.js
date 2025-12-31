@@ -22,6 +22,7 @@ const getInvestmentSettings = asyncHandler(async (req, res) => {
     }
 
     const result = {
+      investmentEnabled: settings.investmentEnabled ?? true,
       goldPrice: settings.goldRate24kt || settings.goldRate || null, // 24kt for backward compatibility
       goldPrice24kt: settings.goldRate24kt || settings.goldRate || null,
       goldPrice22kt: settings.goldRate22kt || null,
@@ -415,6 +416,96 @@ const getProductPriceBreakdown = asyncHandler(async (req, res) => {
   }
 });
 
+// ✅ GET Investment Option Status
+const getInvestmentOption = asyncHandler(async (req, res) => {
+  console.log("Fetching Investment Option Status...");
+
+  try {
+    const settings = await InvestmentSettings.findOne().sort({ updatedAt: -1 });
+
+    if (!settings) {
+      return res.status(200).json({
+        status: true,
+        data: {
+          investmentEnabled: true, // Default to enabled if no settings exist
+        },
+      });
+    }
+
+    return res.status(200).json({
+      status: true,
+      data: {
+        investmentEnabled: settings.investmentEnabled ?? true,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching investment option:", error);
+    return res.status(500).json({
+      status: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+});
+
+// ✅ UPDATE Investment Option Status
+const updateInvestmentOption = asyncHandler(async (req, res) => {
+  console.log("Updating Investment Option:", req.body);
+  
+  const requestingAdmin = await adminModel.findById(req.admin.id);
+  if (!requestingAdmin) {
+    return res.status(403).json({
+      status: false,
+      message: 'Not authorized. Only super admins can update investment option.'
+    });
+  }
+
+  try {
+    const { investmentEnabled } = req.body;
+
+    if (typeof investmentEnabled !== 'boolean') {
+      return res.status(400).json({
+        status: false,
+        message: "investmentEnabled must be a boolean value",
+      });
+    }
+
+    let settings = await InvestmentSettings.findOne();
+    if (settings) {
+      settings.investmentEnabled = investmentEnabled;
+      settings.updatedAt = new Date();
+      await settings.save();
+    } else {
+      // Create new settings with default values
+      settings = await InvestmentSettings.create({
+        investmentEnabled: investmentEnabled,
+        goldRate: 0,
+        goldRate24kt: 0,
+        goldRate22kt: 0,
+        goldRate18kt: 0,
+        silverRate: 0,
+        goldStatus: true,
+        silverStatus: false,
+        makingChargesPercentage: 15,
+      });
+    }
+
+    return res.status(200).json({
+      status: true,
+      message: `Investment option ${investmentEnabled ? 'enabled' : 'disabled'} successfully`,
+      data: {
+        investmentEnabled: settings.investmentEnabled,
+      },
+    });
+  } catch (error) {
+    console.error("Error updating investment option:", error);
+    return res.status(500).json({
+      status: false,
+      message: error.message,
+    });
+  }
+});
+
 module.exports={
   getInvestmentSettings,
   sendMailotp,
@@ -423,5 +514,7 @@ module.exports={
   createInvestmentSettings,
   updateAllProductPricesManually,
   updateSingleProductPrice,
-  getProductPriceBreakdown
+  getProductPriceBreakdown,
+  getInvestmentOption,
+  updateInvestmentOption
 }

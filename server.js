@@ -457,6 +457,7 @@ app.use("/api/v0/invoices", require("./routers/invoiceRouter"));
 app.use("/api/v0/investment-invoices", require("./routers/investmentInvoiceRouter"));
 app.use("/api/v0/banners", require("./routers/bannerRouter"));
 app.use("/api/v0/shipments", require("./routers/shipmentRouter"));
+app.use("/api/v0/shipment-pricing", require("./routers/shipmentPricingRouter"));
 app.use("/api/v0/autopay", require("./routers/autopayRouter"));
 
 // Debug endpoint for investment invoices
@@ -1903,3 +1904,6 @@ app.get('/api/phonepe/check-status/:orderId', async (req, res) => {
 server.listen(process.env.PORT, () => {
   console.log(`Server on ${process.env.PORT} `);
 });
+
+
+// 31-12-2025

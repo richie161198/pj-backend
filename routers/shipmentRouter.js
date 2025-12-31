@@ -38,8 +38,11 @@ router.get("/user/shipments", isAuth, shipmentController.getUserShipments);
 // Get shipment by order ID or order code
 router.get("/order/:orderId", isAuth, shipmentController.getShipmentByOrder);
 
-// Create return/reverse shipment
+// Create return/reverse shipment (user route)
 router.post("/return", isAuth, shipmentController.createReturnShipment);
+
+// Create return/reverse shipment (admin route)
+router.post("/admin/return", adminAuth, shipmentController.createReturnShipment);
 
 // Cancel shipment
 router.post("/cancel", isAuth, shipmentController.cancelShipment);

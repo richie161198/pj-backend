@@ -2846,6 +2846,92 @@ const getTotalInvestmentOrders = (async (req, res) => {
 });
 
 // ==========================
+// UPDATE ORDER ITEM HUIDs API
+// ==========================
+const updateOrderItemHUIDs = async (req, res) => {
+  try {
+    const { orderId, itemIndex, huids } = req.body;
+
+    // Validate input
+    if (!orderId || itemIndex === undefined || !Array.isArray(huids)) {
+      return res.status(400).json({
+        success: false,
+        error: "orderId, itemIndex, and huids array are required",
+      });
+    }
+
+    // Find the order
+    const order = await productOrder.findById(orderId);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        error: "Order not found",
+      });
+    }
+
+    // Check if order is confirmed
+    if (order.status !== "CONFIRMED") {
+      return res.status(400).json({
+        success: false,
+        error: "HUID can only be added for confirmed orders",
+      });
+    }
+
+    // Validate item index
+    if (itemIndex < 0 || itemIndex >= order.items.length) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid item index",
+      });
+    }
+
+    const item = order.items[itemIndex];
+
+    // Validate HUID count matches quantity
+    if (huids.length > item.quantity) {
+      return res.status(400).json({
+        success: false,
+        error: `Cannot add more than ${item.quantity} HUIDs for this item (quantity: ${item.quantity})`,
+      });
+    }
+
+    // Validate HUID format (basic validation - alphanumeric, typically 6-16 characters)
+    const huidPattern = /^[A-Z0-9]{6,16}$/i;
+    const invalidHuids = huids.filter(huid => huid && !huidPattern.test(huid.trim()));
+    if (invalidHuids.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid HUID format: ${invalidHuids.join(', ')}. HUID should be 6-16 alphanumeric characters.`,
+      });
+    }
+
+    // Update HUIDs (trim whitespace and filter empty strings)
+    order.items[itemIndex].huids = huids
+      .map(huid => huid ? huid.trim() : '')
+      .filter(huid => huid.length > 0);
+
+    await order.save();
+
+    res.status(200).json({
+      success: true,
+      message: "HUIDs updated successfully",
+      data: {
+        orderId: order._id,
+        itemIndex: itemIndex,
+        huids: order.items[itemIndex].huids,
+        quantity: item.quantity,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Update Order Item HUIDs Error:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+};
+
+// ==========================
 // SEND WHATSAPP MESSAGE API
 // ==========================
 const sendOrderWhatsAppMessage = async (req, res) => {
@@ -2944,6 +3030,7 @@ module.exports = {
   withdrawINR,
   getAllOrdersAdmin,
   getAllProductOrdersAdmin,
+  updateOrderItemHUIDs,
   getAllReturnRefundRequestsAdmin,
   acceptReturnRefundRequest,
   rejectReturnRefundRequest,

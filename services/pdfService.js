@@ -507,6 +507,22 @@ const generateOrderInvoicePdf = async (invoiceData) => {
   const finalGst = totalGST !== undefined ? totalGST : calculatedGst;
   const finalDiscount = totalDiscount !== undefined ? totalDiscount : calculatedDiscount;
   const finalTotal = totalAmount || grandTotal;
+  
+  // Calculate subtotal after discount (for GST percentage calculation)
+  // Subtotal = sum of (item totalPrice + making charges) for all items
+  // Subtotal after discount = subtotal - discount
+  // GST is calculated on subtotal after discount
+  const calculatedSubtotal = (items || []).reduce((sum, item) => {
+    const totalPrice = parseFloat(item.totalPrice) || (parseFloat(item.unitPrice) || 0) * (parseInt(item.quantity) || 1);
+    const makingCharges = parseFloat(item.makingCharges) || 0;
+    return sum + totalPrice + makingCharges;
+  }, 0);
+  const finalSubtotal = subtotal !== undefined ? subtotal : calculatedSubtotal;
+  const subtotalAfterDiscount = Math.max(0, finalSubtotal - finalDiscount);
+  
+  // Calculate GST percentage dynamically (GST is calculated on subtotal after discount)
+  const gstPercentage = subtotalAfterDiscount > 0 ? ((finalGst / subtotalAfterDiscount) * 100) : 0;
+  const cgstSgstPercentage = gstPercentage / 2; // Each CGST and SGST is half of total GST percentage
 
   // Build items table body
   const itemsBody = [
@@ -572,8 +588,25 @@ const generateOrderInvoicePdf = async (invoiceData) => {
     return parts.join('\n') || 'N/A';
   };
 
+  // Check if address is in Tamil Nadu
+  const isTamilNaduAddress = (addr) => {
+    if (!addr) return false;
+    const addrStr = typeof addr === 'string' 
+      ? addr.toUpperCase() 
+      : `${addr.state || ''} ${addr.city || ''} ${addr.street || ''}`.toUpperCase();
+    return addrStr.includes('TAMILNADU') || addrStr.includes('TAMIL NADU') || addrStr.includes(' TN ') || addrStr.endsWith(' TN');
+  };
+
   const billing = billingAddress || customerAddress;
   const shipping = shippingAddress || customerAddress;
+  
+  // Determine if GST should be split (Tamil Nadu) or shown as IGST (other states)
+  const isTamilNadu = isTamilNaduAddress(billing) || isTamilNaduAddress(shipping);
+  
+  // Calculate CGST and SGST (split equally) or IGST
+  const cgstAmount = isTamilNadu ? (finalGst / 2) : 0;
+  const sgstAmount = isTamilNadu ? (finalGst / 2) : 0;
+  const igstAmount = isTamilNadu ? 0 : finalGst;
 
   const docDefinition = {
     pageSize: 'A4',
@@ -686,7 +719,31 @@ const generateOrderInvoicePdf = async (invoiceData) => {
         },
         margin: [0, 0, 0, 20]
       },
-
+      /// GST amount here - Show CGST/SGST for Tamil Nadu, IGST for other states
+      isTamilNadu ? {
+        columns: [
+          {
+            width: '50%',
+            stack: [
+              { text: `CGST (1.5%) : ` + formatAmt(cgstAmount), fontSize: 9, color: '#333', margin: [0, 0, 0, 5] },
+              { text: `SGST (1.5%) : ` + formatAmt(sgstAmount), fontSize: 9, color: '#333' }
+            ]
+          },
+          {
+            width: '50%',
+            stack: [
+              { text: 'Total GST Amount: ' + formatAmt(finalGst), fontSize: 9, bold: true, color: '#333', alignment: 'right', margin: [0, 0, 0, 5] },
+              { text: `(CGST + SGST: 3%)`, fontSize: 8, color: '#666', alignment: 'right' }
+            ]
+          }
+        ],
+        margin: [0, 0, 0, 20]
+      } : {
+        text: `IGST (3%) : ` + formatAmt(igstAmount),
+        fontSize: 9,
+        color: '#333',
+        margin: [0, 0, 0, 20]
+      },
       // Invoice Amount and Total Amount Payable
       {
         columns: [

@@ -1,6 +1,10 @@
 const mongoose = require("mongoose");
 
 const investmentSchema = new mongoose.Schema({
+    investmentEnabled: {
+        type: Boolean,
+        default: true
+    }, // Master toggle for investment features
     goldRate: {
         type: Number,
         default: 0

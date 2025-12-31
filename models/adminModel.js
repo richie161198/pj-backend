@@ -35,6 +35,7 @@ const adminSchema = new mongoose.Schema({
   permissions: [{
     type: String,
     enum: [
+      // Legacy permissions (for backward compatibility)
       'users_manage',
       'products_manage', 
       'orders_manage',
@@ -43,7 +44,34 @@ const adminSchema = new mongoose.Schema({
       'reports_view',
       'analytics_view',
       'support_manage',
-      'finance_manage'
+      'finance_manage',
+      // Page-based permissions - All pages require explicit permissions
+      'dashboard',
+      'customers',
+      'products',
+      'categories',
+      'banners',
+      'orders',
+      'invoices',
+      'return-refunds',
+      'investment-orders',
+      'autopay-subscriptions',
+      'investment-invoices',
+      'investment-settings',
+      'shipment-settings',
+      'support-tickets',
+      'notifications',
+      'referred-users',
+      'admin-profile',
+      'admin-list',
+      'maintenance',
+      'privacy-policy',
+      'return-policy',
+      'shipping-policy',
+      'cancellation-policy',
+      'grievance-policy',
+      'digigold-redemption-policy',
+      'terms-and-conditions'
     ]
   }],
   

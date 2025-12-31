@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { isAuth } = require("../middleware/tokenValidation");
+const { adminAuth } = require("../middleware/adminAuth");
 
 const {
   getAuthToken,
@@ -14,6 +15,7 @@ const {
   unpauseSubscription,
   validateUpiAddress,
   getUserSubscriptions,
+  getAllSubscriptionsAdmin,
   syncSubscriptionStatuses,
   initiateRefund,
   handleWebhook,
@@ -38,6 +40,9 @@ router.post("/validate-upi", isAuth, validateUpiAddress);
 router.get("/subscriptions", isAuth, getUserSubscriptions);
 router.post("/subscriptions/sync-statuses", isAuth, syncSubscriptionStatuses);
 router.post("/refund", isAuth, initiateRefund);
+
+// Admin routes
+router.get("/admin/subscriptions", adminAuth, getAllSubscriptionsAdmin);
 
 module.exports = router;
 

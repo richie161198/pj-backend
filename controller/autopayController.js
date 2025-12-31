@@ -1185,6 +1185,66 @@ const getUserSubscriptions = async (req, res) => {
 };
 
 /**
+ * Get All Subscriptions (Admin)
+ * GET /api/v0/autopay/admin/subscriptions
+ */
+const getAllSubscriptionsAdmin = async (req, res) => {
+  try {
+    const { status, page = 1, limit = 20, search, userId } = req.query;
+
+    const filter = {};
+    
+    if (status) {
+      filter.status = status.toUpperCase();
+    }
+    
+    if (userId) {
+      filter.userId = userId;
+    }
+    
+    if (search) {
+      filter.$or = [
+        { merchantSubscriptionId: { $regex: search, $options: 'i' } },
+        { merchantOrderId: { $regex: search, $options: 'i' } },
+        { subscriptionName: { $regex: search, $options: 'i' } },
+        { 'metadata.vpa': { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const subscriptions = await Subscription.find(filter)
+      .populate('userId', 'name email phone')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const totalCount = await Subscription.countDocuments(filter);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        subscriptions,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(totalCount / parseInt(limit)),
+          totalCount,
+          hasNextPage: parseInt(page) < Math.ceil(totalCount / parseInt(limit)),
+          hasPrevPage: parseInt(page) > 1,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("❌ Get All Subscriptions Admin Error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch subscriptions",
+      error: error.message,
+    });
+  }
+};
+
+/**
  * Sync all subscription statuses from PhonePe API
  * This checks the actual status from PhonePe and updates the database
  */
@@ -1463,6 +1523,7 @@ module.exports = {
   checkOrderStatus,
   checkSubscriptionStatus,
   notifyRedemption,
+  getAllSubscriptionsAdmin,
   executeRedemption,
   revokeSubscription,
   pauseSubscription,

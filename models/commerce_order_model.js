@@ -7,9 +7,9 @@ const ProductOrderSchema = new mongoose.Schema(
     items: [
       {
         productDataid: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
-        
         quantity: Number,
         price: Number,
+        huids: [{ type: String }], // HUID array - one per quantity
       },
     ],
     totalAmount: { type: Number, required: true },
