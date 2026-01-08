@@ -77,6 +77,10 @@ const userSchema = mongoose.Schema(
       required: [true, "Please add an email"],
       unique: [true, "Please add a valid email"],
     },
+    state: {
+      type: String,
+      required: [true, "Please add a state"],
+    },
     profilePhoto: {
       type: String,
       default: "",

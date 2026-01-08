@@ -4,6 +4,13 @@ const Ticket = require("../models/ticket_model");
 const Product = require("../models/product_model");
 const asyncHandler = require("express-async-handler");
 const bcrypt = require("bcryptjs");
+const twilio = require("twilio");
+
+// Initialize Twilio client for WhatsApp messaging
+const twilioClient = twilio(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN
+);
 
 const getAllUser = asyncHandler(async (req, res) => {
   const user = await User.find({});
@@ -682,4 +689,55 @@ const getReferralStats = asyncHandler(async (req, res) => {
   }
 });
 
-module.exports = { updateTicketStatus, getuserByIds, getTicketById, getMyTickets, createTicket, addToWishlist, removeFromWishlist, getWishlist, addAddress, getAddresses, deleteAddress, updateAddress, updateuserById, getuserById, getAllUser, deleteuserById, getGoldprice, setTransactionPin, verifyTransactionPin, getAllTickets, getTicketByIdAdmin, updateTicketStatusAdmin, getTicketStats, addTicketReply, getReferredUsers, getReferralStats }
+// Send WhatsApp message to customer
+const sendWhatsAppMessageToCustomer = asyncHandler(async (req, res) => {
+  try {
+    const { phoneNumber, message } = req.body;
+
+    if (!phoneNumber || !message) {
+      return res.status(400).json({
+        status: false,
+        message: "Phone number and message are required"
+      });
+    }
+
+    // Format phone number (ensure it starts with +91 for India)
+    let formattedPhone = phoneNumber;
+    if (!formattedPhone.startsWith('+')) {
+      // Remove any leading zeros or country code if present
+      formattedPhone = formattedPhone.replace(/^0+/, '').replace(/^91/, '');
+      formattedPhone = `whatsapp:+91${formattedPhone}`;
+    } else {
+      formattedPhone = `whatsapp:${formattedPhone}`;
+    }
+
+    console.log(`📱 Sending WhatsApp message to: ${formattedPhone}`);
+
+    // Send WhatsApp message
+    const twilioMessage = await twilioClient.messages.create({
+      from: `whatsapp:+919933661149`,
+      to: formattedPhone,
+      body: message
+    });
+
+    console.log(`✅ WhatsApp message sent successfully. SID: ${twilioMessage.sid}`);
+
+    res.status(200).json({
+      status: true,
+      message: "WhatsApp message sent successfully",
+      data: {
+        messageSid: twilioMessage.sid,
+        phoneNumber: phoneNumber
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error sending WhatsApp message:', error);
+    res.status(500).json({
+      status: false,
+      message: "Failed to send WhatsApp message",
+      error: error.message
+    });
+  }
+});
+
+module.exports = { updateTicketStatus, getuserByIds, getTicketById, getMyTickets, createTicket, addToWishlist, removeFromWishlist, getWishlist, addAddress, getAddresses, deleteAddress, updateAddress, updateuserById, getuserById, getAllUser, deleteuserById, getGoldprice, setTransactionPin, verifyTransactionPin, getAllTickets, getTicketByIdAdmin, updateTicketStatusAdmin, getTicketStats, addTicketReply, getReferredUsers, getReferralStats, sendWhatsAppMessageToCustomer }

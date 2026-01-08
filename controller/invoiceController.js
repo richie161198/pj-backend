@@ -1117,6 +1117,9 @@ const downloadInvoiceByOrderCode = asyncHandler(async (req, res) => {
       ? `${billingAddr.street || ''}\n${billingAddr.city || ''}, ${billingAddr.state || ''} - ${billingAddr.pincode || ''}`
       : 'N/A';
 
+    // Get shipping amount from saved invoice
+    const shippingAmount = parseFloat(invoice.shippingDetails?.shippingPrice || invoice.shippingDetails?.shippingAmount || 0) || 0;
+
     // Generate PDF using saved invoice data (same structure as email)
     const pdfInvoiceData = {
       invoiceNumber: invoice.invoiceNumber,
@@ -1144,6 +1147,7 @@ const downloadInvoiceByOrderCode = asyncHandler(async (req, res) => {
       totalGST: invoice.pricing?.totalGST || 0,
       totalDiscount: invoice.pricing?.totalDiscount || 0,
       subtotal: invoice.pricing?.subtotal || 0,
+      shippingAmount: shippingAmount, // Use saved shipping amount from invoice
       createdAt: invoice.createdAt || invoice.invoiceDate || new Date()
     };
 
@@ -1193,6 +1197,9 @@ const downloadInvoice = asyncHandler(async (req, res) => {
       ? `${billingAddr.street || ''}\n${billingAddr.city || ''}, ${billingAddr.state || ''} - ${billingAddr.pincode || ''}`
       : 'N/A';
 
+    // Get shipping amount from saved invoice
+    const shippingAmount = parseFloat(invoice.shippingDetails?.shippingPrice || invoice.shippingDetails?.shippingAmount || 0) || 0;
+
     // Generate PDF using saved invoice data (same structure as email and app)
     const pdfInvoiceData = {
       invoiceNumber: invoice.invoiceNumber,
@@ -1220,6 +1227,7 @@ const downloadInvoice = asyncHandler(async (req, res) => {
       totalGST: invoice.pricing?.totalGST || 0,
       totalDiscount: invoice.pricing?.totalDiscount || 0,
       subtotal: invoice.pricing?.subtotal || 0,
+      shippingAmount: shippingAmount, // Use saved shipping amount from invoice
       createdAt: invoice.createdAt || invoice.invoiceDate || new Date()
     };
 

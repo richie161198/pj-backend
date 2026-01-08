@@ -6,7 +6,7 @@ const bcrypt = require("bcryptjs");
 const crypto = require('crypto');
 
 function generateToken  (data)  {
-  return jwt.sign(data, process.env.JWT_SECRET, { expiresIn: "1d" });
+  return jwt.sign(data, process.env.JWT_SECRET, { expiresIn: "45d" });
 };
 
 function referral () {

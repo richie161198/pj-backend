@@ -19,6 +19,7 @@ const { sendEmail } = require("./helpers/mailer");
 const { generateOTP } = require("./helpers/helpers");
 const { v4: uuidv4 } = require("uuid");
 const fs = require("fs");
+const { startGoldPriceScheduler } = require("./controller/goldPriceController");
 
 const logoBase64 = fs.readFileSync("public/logo/23.png").toString("base64");
 
@@ -459,6 +460,8 @@ app.use("/api/v0/banners", require("./routers/bannerRouter"));
 app.use("/api/v0/shipments", require("./routers/shipmentRouter"));
 app.use("/api/v0/shipment-pricing", require("./routers/shipmentPricingRouter"));
 app.use("/api/v0/autopay", require("./routers/autopayRouter"));
+app.use("/api/v0/gold-price", require("./routers/goldPriceRouter"));
+app.use("/api/v0/appointments", require("./routers/appointmentRouter"));
 
 // Debug endpoint for investment invoices
 app.get("/debug-invoice/:orderId", async (req, res) => {
@@ -1903,7 +1906,6 @@ app.get('/api/phonepe/check-status/:orderId', async (req, res) => {
 
 server.listen(process.env.PORT, () => {
   console.log(`Server on ${process.env.PORT} `);
+  // Start daily gold price sync (fetch once every 24h)
+  startGoldPriceScheduler();
 });
-
-
-// 31-12-2025

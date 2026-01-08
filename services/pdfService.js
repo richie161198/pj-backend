@@ -156,6 +156,8 @@ const generateInvestmentInvoicePdf = async (invoiceData) => {
     paymentMethod,
     newBalance,
     newINRBalance,
+    customerState,
+    customerAddress,
     createdAt
   } = invoiceData;
 
@@ -180,6 +182,40 @@ const generateInvestmentInvoicePdf = async (invoiceData) => {
   const formatDateShort = (date) => {
     return new Date(date || new Date()).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
+
+  // Helper function to check if address is Tamil Nadu
+  const isTamilNaduAddress = (addr) => {
+    if (!addr) return false;
+    const addrStr = typeof addr === 'string' ? addr : JSON.stringify(addr);
+    return addrStr.includes('Tamil Nadu') || 
+           addrStr.includes('Tamilnadu') || 
+           addrStr.includes('Tamil Nadu') ||
+           addrStr.includes(' TN ') || 
+           addrStr.endsWith(' TN');
+  };
+
+  // Check if customer state is Tamil Nadu
+  const customerStateStr = customerState || '';
+  const customerAddrStr = customerAddress || '';
+  const isTamilNadu = customerStateStr.includes('Tamil Nadu') || 
+                      customerStateStr.includes('Tamilnadu') || 
+                      customerStateStr.includes('TN') ||
+                      isTamilNaduAddress(customerAddrStr);
+
+  // Calculate CGST and SGST (split equally) or IGST
+  const finalGst = parseFloat(gstAmount) || 0;
+  const cgstAmount = isTamilNadu ? (finalGst / 2) : 0;
+  const sgstAmount = isTamilNadu ? (finalGst / 2) : 0;
+  const igstAmount = isTamilNadu ? 0 : finalGst;
+  
+  // Calculate round off for GST (always round UP to maximum end)
+  const roundedGst = Math.ceil(finalGst);
+  const roundOff = roundedGst - finalGst;
+  // Only show roundoff if positive (upperside only)
+  const showRoundoff = roundOff > 0;
+  
+  // Calculate final total with roundoff added
+  const finalTotalWithRoundoff = parseFloat(totalAmount) + (showRoundoff ? roundOff : 0);
 
   const docDefinition = {
     pageSize: 'A4',
@@ -283,9 +319,9 @@ const generateInvestmentInvoicePdf = async (invoiceData) => {
               { text: formatAmt(ratePerGram), fontSize: 9, alignment: 'center', margin: [8, 10, 8, 10] },
               { text: formatAmt(baseAmount), fontSize: 9, alignment: 'right', margin: [8, 10, 8, 10] }
             ],
-            // GST row
+            // GST row - Show CGST/SGST for Tamil Nadu, IGST for others
             [
-              { text: `GST(${isBuy ? gstRate || 3 : 0}%)`, fontSize: 9, margin: [8, 10, 8, 10] },
+              { text: isBuy ? (isTamilNadu ? `CGST + SGST (3%)` : `IGST (3%)`) : `GST(0%)`, fontSize: 9, margin: [8, 10, 8, 10] },
               { text: '', margin: [8, 10, 8, 10] },
               { text: '', margin: [8, 10, 8, 10] },
               { text: isBuy ? formatAmt(gstAmount) : '0.00', fontSize: 9, alignment: 'right', margin: [8, 10, 8, 10] }
@@ -318,8 +354,33 @@ const generateInvestmentInvoicePdf = async (invoiceData) => {
           hLineColor: () => '#CCCCCC',
           vLineColor: () => '#CCCCCC'
         },
-        margin: [0, 0, 0, 25]
+        margin: [0, 0, 0, 15]
       },
+
+      // GST Breakdown - Show CGST/SGST for Tamil Nadu, IGST for others (only for buy orders)
+      isBuy && finalGst > 0 ? {
+        columns: [
+          {
+            width: '50%',
+            stack: isTamilNadu ? [
+              { text: `CGST (1.5%) : ` + formatAmt(cgstAmount), fontSize: 9, color: '#333', margin: [0, 0, 0, 5] },
+              { text: `SGST (1.5%) : ` + formatAmt(sgstAmount), fontSize: 9, color: '#333', margin: [0, 0, 0, 5] },
+              showRoundoff ? { text: `Roundoff : ` + formatAmt(roundOff), fontSize: 9, color: '#333' } : { text: '', fontSize: 9 }
+            ] : [
+              { text: `IGST (3%) : ` + formatAmt(igstAmount), fontSize: 9, color: '#333', margin: [0, 0, 0, 5] },
+              showRoundoff ? { text: `Roundoff : ` + formatAmt(roundOff), fontSize: 9, color: '#333' } : { text: '', fontSize: 9 }
+            ]
+          },
+          {
+            width: '50%',
+            stack: [
+              { text: 'Total GST Amount: ' + formatAmt(roundedGst), fontSize: 9, bold: true, color: '#333', alignment: 'right', margin: [0, 0, 0, 5] },
+              { text: isTamilNadu ? `(CGST + SGST: 3%)` : `(IGST: 3%)`, fontSize: 8, color: '#666', alignment: 'right' }
+            ]
+          }
+        ],
+        margin: [0, 0, 0, 25]
+      } : { text: '', fontSize: 9, margin: [0, 0, 0, 25] },
 
       // Transaction Details Box
       {
@@ -371,8 +432,31 @@ const generateInvestmentInvoicePdf = async (invoiceData) => {
           vLineColor: () => goldColor,
           fillColor: () => grayBg
         },
-        margin: [0, 0, 0, 30]
+        margin: [0, 0, 0, 20]
       },
+
+      // Total Amount Payable (only for buy orders with GST)
+      isBuy && finalGst > 0 ? {
+        table: {
+          widths: ['*'],
+          body: [[
+            {
+              stack: [
+                { text: 'Total Amount Payable', alignment: 'center', fontSize: 10, color: '#555', margin: [0, 12, 0, 6] },
+                { text: formatAmt(finalTotalWithRoundoff), fontSize: 20, bold: true, color: goldColor, alignment: 'center', margin: [0, 0, 0, 12] }
+              ]
+            }
+          ]]
+        },
+        layout: {
+          hLineWidth: () => 0.5,
+          vLineWidth: () => 0.5,
+          hLineColor: () => '#CCCCCC',
+          vLineColor: () => '#CCCCCC',
+          fillColor: () => lightGoldBg
+        },
+        margin: [0, 0, 0, 30]
+      } : { text: '', fontSize: 9, margin: [0, 0, 0, 30] },
 
       // Authorized Signatory - Right aligned
       // {
@@ -444,6 +528,7 @@ const generateOrderInvoicePdf = async (invoiceData) => {
     totalGST,
     totalDiscount,
     subtotal,
+    shippingAmount = 0,
     createdAt
   } = invoiceData;
 
@@ -607,6 +692,15 @@ const generateOrderInvoicePdf = async (invoiceData) => {
   const cgstAmount = isTamilNadu ? (finalGst / 2) : 0;
   const sgstAmount = isTamilNadu ? (finalGst / 2) : 0;
   const igstAmount = isTamilNadu ? 0 : finalGst;
+  
+  // Calculate round off for GST (always round UP to maximum end)
+  const roundedGst = Math.ceil(finalGst);
+  const roundOff = roundedGst - finalGst;
+  // Only show roundoff if positive (upperside only)
+  const showRoundoff = roundOff > 0;
+  
+  // Calculate final total including shipping and roundoff
+  const finalTotalWithShipping = finalTotal + (parseFloat(shippingAmount) || 0) + (showRoundoff ? roundOff : 0);
 
   const docDefinition = {
     pageSize: 'A4',
@@ -726,24 +820,56 @@ const generateOrderInvoicePdf = async (invoiceData) => {
             width: '50%',
             stack: [
               { text: `CGST (1.5%) : ` + formatAmt(cgstAmount), fontSize: 9, color: '#333', margin: [0, 0, 0, 5] },
-              { text: `SGST (1.5%) : ` + formatAmt(sgstAmount), fontSize: 9, color: '#333' }
+              { text: `SGST (1.5%) : ` + formatAmt(sgstAmount), fontSize: 9, color: '#333', margin: [0, 0, 0, 5] },
+              showRoundoff ? { text: `Roundoff : ` + formatAmt(roundOff), fontSize: 9, color: '#333' } : { text: '', fontSize: 9 }
             ]
           },
           {
             width: '50%',
             stack: [
-              { text: 'Total GST Amount: ' + formatAmt(finalGst), fontSize: 9, bold: true, color: '#333', alignment: 'right', margin: [0, 0, 0, 5] },
+              { text: 'Total GST Amount: ' + formatAmt(roundedGst), fontSize: 9, bold: true, color: '#333', alignment: 'right', margin: [0, 0, 0, 5] },
               { text: `(CGST + SGST: 3%)`, fontSize: 8, color: '#666', alignment: 'right' }
             ]
           }
         ],
         margin: [0, 0, 0, 20]
       } : {
-        text: `IGST (3%) : ` + formatAmt(igstAmount),
-        fontSize: 9,
-        color: '#333',
+        columns: [
+          {
+            width: '50%',
+            stack: [
+              { text: `IGST (3%) : ` + formatAmt(igstAmount), fontSize: 9, color: '#333', margin: [0, 0, 0, 5] },
+              showRoundoff ? { text: `Roundoff : ` + formatAmt(roundOff), fontSize: 9, color: '#333' } : { text: '', fontSize: 9 }
+            ]
+          },
+          {
+            width: '50%',
+            stack: [
+              { text: 'Total GST Amount: ' + formatAmt(roundedGst), fontSize: 9, bold: true, color: '#333', alignment: 'right' }
+            ]
+          }
+        ],
         margin: [0, 0, 0, 20]
       },
+      
+      // Shipping Amount
+      parseFloat(shippingAmount) > 0 ? {
+        columns: [
+          {
+            width: '50%',
+            text: 'Shipping Charges: ' + formatAmt(shippingAmount),
+            fontSize: 9,
+            color: '#333',
+            margin: [0, 0, 0, 20]
+          },
+          {
+            width: '50%',
+            text: '',
+            fontSize: 9
+          }
+        ],
+        margin: [0, 0, 0, 20]
+      } : { text: '', fontSize: 9, margin: [0, 0, 0, 20] },
       // Invoice Amount and Total Amount Payable
       {
         columns: [
@@ -751,7 +877,7 @@ const generateOrderInvoicePdf = async (invoiceData) => {
             width: '55%',
             stack: [
               { text: 'Invoice Amount (In Words):', fontSize: 10, bold: true, margin: [0, 0, 0, 8] },
-              { text: numberToWords(Math.round(finalTotal)), fontSize: 9, color: '#333', lineHeight: 1.4 }
+              { text: numberToWords(Math.round(finalTotalWithShipping)), fontSize: 9, color: '#333', lineHeight: 1.4 }
             ]
           },
           {
@@ -762,7 +888,7 @@ const generateOrderInvoicePdf = async (invoiceData) => {
                 {
                   stack: [
                     { text: 'Total Amount Payable', alignment: 'center', fontSize: 10, color: '#555', margin: [0, 12, 0, 6] },
-                    { text: formatAmt(finalTotal), fontSize: 20, bold: true, color: goldColor, alignment: 'center', margin: [0, 0, 0, 12] }
+                    { text: formatAmt(finalTotalWithShipping), fontSize: 20, bold: true, color: goldColor, alignment: 'center', margin: [0, 0, 0, 12] }
                   ]
                 }
               ]]

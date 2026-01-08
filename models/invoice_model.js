@@ -151,6 +151,14 @@ const invoiceSchema = new mongoose.Schema({
       enum: ['standard', 'express', 'overnight', 'pickup'],
       default: 'standard'
     },
+    shippingPrice: {
+      type: Number,
+      default: 0
+    },
+    shippingAmount: {
+      type: Number,
+      default: 0
+    },
     trackingNumber: String,
     estimatedDelivery: Date,
     actualDelivery: Date,

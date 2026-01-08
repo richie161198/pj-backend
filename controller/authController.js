@@ -42,7 +42,7 @@ const client = twilio(
   process.env.TWILIO_AUTH_TOKEN
 );
 const signUpRequest = asyncHandler(async (req, res) => {
-  const { name, email, phone, password, referredBy } = req.body;
+  const { name, email, phone,state, password, referredBy } = req.body;
 
   if (!name || !email || !password) {
     res.status(400).json({ message: "Please enter all fields" });
@@ -227,6 +227,7 @@ const signUpRequest = asyncHandler(async (req, res) => {
       const user = await userModel.create({
         name,
         email,
+        state,
         otp: { codeHash, expiresAt },
         referralCode: referralCode,
         referredBy: referringUser ? referringUser._id : null,

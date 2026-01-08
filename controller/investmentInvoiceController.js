@@ -816,7 +816,7 @@ const generateInvestmentInvoiceHTML = (invoice) => {
 // @access  Private
 const downloadInvoicePDF = asyncHandler(async (req, res) => {
   try {
-    const invoice = await InvestmentInvoice.findById(req.params.id).populate('userId', 'name email phone');
+    const invoice = await InvestmentInvoice.findById(req.params.id).populate('userId', 'name email phone state address');
 
     if (!invoice) {
       return res.status(404).json({
@@ -824,6 +824,11 @@ const downloadInvoicePDF = asyncHandler(async (req, res) => {
         message: 'Invoice not found',
       });
     }
+
+    // Get user state from populated userId
+    const userState = invoice.userId?.state || '';
+    const userAddress = invoice.userId?.address || '';
+    const customerAddressStr = typeof userAddress === 'string' ? userAddress : (userAddress?.street || '');
 
     // Generate PDF using pdfmake
     // Map invoice fields correctly: amount -> baseAmount, totalInvoiceValue -> totalAmount
@@ -844,6 +849,8 @@ const downloadInvoicePDF = asyncHandler(async (req, res) => {
       paymentMethod: invoice.paymentMethod || 'UPI',
       newBalance: invoice.newBalance || null, // May not exist for all invoices
       newINRBalance: invoice.newINRBalance || null, // May not exist for all invoices
+      customerState: userState,
+      customerAddress: customerAddressStr,
       createdAt: invoice.createdAt || invoice.invoiceDate
     };
 
@@ -867,7 +874,7 @@ const downloadInvoicePDF = asyncHandler(async (req, res) => {
 // @access  Private
 const downloadInvoiceByOrderId = asyncHandler(async (req, res) => {
   try {
-    const invoice = await InvestmentInvoice.findOne({ orderId: req.params.orderId }).populate('userId', 'name email phone');
+    const invoice = await InvestmentInvoice.findOne({ orderId: req.params.orderId }).populate('userId', 'name email phone state address');
 
     if (!invoice) {
       return res.status(404).json({
@@ -875,6 +882,11 @@ const downloadInvoiceByOrderId = asyncHandler(async (req, res) => {
         message: 'Invoice not found for this order',
       });
     }
+
+    // Get user state from populated userId
+    const userState = invoice.userId?.state || '';
+    const userAddress = invoice.userId?.address || '';
+    const customerAddressStr = typeof userAddress === 'string' ? userAddress : (userAddress?.street || '');
 
     // Generate PDF using pdfmake
     // Map invoice fields correctly: amount -> baseAmount, totalInvoiceValue -> totalAmount
@@ -895,6 +907,8 @@ const downloadInvoiceByOrderId = asyncHandler(async (req, res) => {
       paymentMethod: invoice.paymentMethod || 'UPI',
       newBalance: invoice.newBalance || null, // May not exist for all invoices
       newINRBalance: invoice.newINRBalance || null, // May not exist for all invoices
+      customerState: userState,
+      customerAddress: customerAddressStr,
       createdAt: invoice.createdAt || invoice.invoiceDate
     };
 

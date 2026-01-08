@@ -59,6 +59,7 @@ const adminSchema = new mongoose.Schema({
       'investment-invoices',
       'investment-settings',
       'shipment-settings',
+           'appointments',
       'support-tickets',
       'notifications',
       'referred-users',

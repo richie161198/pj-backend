@@ -71,10 +71,10 @@ async function sendWhatsAppMessage(phoneNumber, orderCode, invoiceNumber, totalA
 // Helper function to generate order confirmation email HTML
 function generateOrderConfirmationEmailHTML(order, customer, products, pricing, invoiceNumber) {
   const formatCurrency = (amount) => `₹${parseFloat(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const formatDate = (date) => new Date(date).toLocaleDateString('en-IN', { 
-    year: 'numeric', month: 'long', day: 'numeric' 
+  const formatDate = (date) => new Date(date).toLocaleDateString('en-IN', {
+    year: 'numeric', month: 'long', day: 'numeric'
   });
-  
+
   const productRows = products.map(product => `
     <tr>
       <td style="padding: 12px; border-bottom: 1px solid #eee;">
@@ -228,13 +228,14 @@ async function generateOrderInvoicePDF(invoice, customerDetails, products, prici
     totalGST: parseFloat(pricing.totalGST) || 0,
     totalDiscount: parseFloat(pricing.totalDiscount) || 0,
     subtotal: parseFloat(pricing.subtotal) || 0,
+    shippingAmount: parseFloat(pricing.shippingAmount || invoice.shippingDetails?.shippingPrice || invoice.shippingDetails?.shippingAmount || invoice.pricing?.shippingAmount || 0) || 0,
     createdAt: invoice.createdAt || new Date()
   };
 
   console.log('📄 Generating order invoice PDF...');
   const pdfBuffer = await generateOrderInvoicePdf(pdfInvoiceData);
   console.log('📄 PDF generated, size:', pdfBuffer.length, 'bytes');
-  
+
   return pdfBuffer;
 }
 
@@ -382,7 +383,12 @@ const buyOrSellGold = async (req, res) => {
       // Send confirmation email with Investment Invoice PDF
       try {
         console.log('📧 Generating investment invoice PDF for BUY order:', orderId);
-        
+
+        // Get user state and address
+        const userState = user.state || '';
+        const userAddress = user.address || '';
+        const customerAddressStr = typeof userAddress === 'string' ? userAddress : (userAddress?.street || '');
+
         // Generate Investment Invoice PDF
         const pdfBuffer = await generateInvestmentInvoicePDF({
           invoiceNumber,
@@ -400,6 +406,8 @@ const buyOrSellGold = async (req, res) => {
           totalAmount: parseFloat(inrAmount),
           paymentMethod: Payment_method,
           newBalance: newGoldBalance,
+          customerState: userState,
+          customerAddress: customerAddressStr,
           createdAt: new Date()
         });
 
@@ -468,7 +476,7 @@ const buyOrSellGold = async (req, res) => {
             </div>
           </div>
         `;
-        
+
         await sendEmailWithAttachment(
           user.email,
           emailSubject,
@@ -560,7 +568,12 @@ const buyOrSellGold = async (req, res) => {
       // Send confirmation email with Investment Invoice PDF
       try {
         console.log('📧 Generating investment invoice PDF for SELL order:', orderId);
-        
+
+        // Get user state and address
+        const userState = user.state || '';
+        const userAddress = user.address || '';
+        const customerAddressStr = typeof userAddress === 'string' ? userAddress : (userAddress?.street || '');
+
         // Generate Investment Invoice PDF
         const pdfBuffer = await generateInvestmentInvoicePDF({
           invoiceNumber: invoiceNumberSell,
@@ -579,6 +592,8 @@ const buyOrSellGold = async (req, res) => {
           paymentMethod: Payment_method,
           newBalance: newGoldBalance,
           newINRBalance: newINRBalance,
+          customerState: userState,
+          customerAddress: customerAddressStr,
           createdAt: new Date()
         });
 
@@ -645,7 +660,7 @@ const buyOrSellGold = async (req, res) => {
             </div>
           </div>
         `;
-        
+
         await sendEmailWithAttachment(
           user.email,
           emailSubject,
@@ -757,11 +772,11 @@ const getParticularOrderHistory = async (req, res) => {
 // Place Order
 const placeOrder = async (req, res) => {
   try {
-    const { items, totalAmount, deliveryAddress,name,phone,street,
-city,
-state,
-pincode,
-landmark, } = req.body;
+    const { items, totalAmount, deliveryAddress, name, phone, street,
+      city,
+      state,
+      pincode,
+      landmark, } = req.body;
 
     console.log(deliveryAddress, req.user.id,);
     // console.log(deliveryAddress.name,deliveryAddress.phone,deliveryAddress.street,deliveryAddress.city,deliveryAddress.state,deliveryAddress.pincode,deliveryAddress.landmark,deliveryAddress.type);
@@ -780,7 +795,7 @@ landmark, } = req.body;
     // Parse delivery address - prioritize direct fields from req.body, then deliveryAddress object/string
     // This needs to be outside try-catch blocks so it's accessible for both shipment and invoice creation
     let parsedDeliveryAddress = null;
-    
+
     // Try to parse deliveryAddress if it's a JSON string
     if (deliveryAddress) {
       if (typeof deliveryAddress === 'string') {
@@ -797,13 +812,13 @@ landmark, } = req.body;
         console.log('✅ Using deliveryAddress as object:', parsedDeliveryAddress);
       }
     }
-    
+
     // Debug: Log what we have
     console.log('📦 Address Fields from req.body:', { name, phone, street, city, state, pincode, landmark });
     console.log('📦 Parsed deliveryAddress:', parsedDeliveryAddress);
 
     // Get customer details once (used in both shipment and invoice creation)
-      const customer = await User.findById(req.user.id);
+    const customer = await User.findById(req.user.id);
 
     // Automatically create shipment with BMC integration
     try {
@@ -827,7 +842,7 @@ landmark, } = req.body;
         let addressCity = city;
         let addressState = state;
         let addressPincode = pincode;
-        
+
         // If req.body fields are missing, use parsedDeliveryAddress
         if (!addressLine1 || addressLine1.trim() === '') {
           addressLine1 = parsedDeliveryAddress?.street || parsedDeliveryAddress?.addressLine1 || parsedDeliveryAddress?.address || null;
@@ -844,7 +859,7 @@ landmark, } = req.body;
         if (!addressPincode || addressPincode.trim() === '') {
           addressPincode = parsedDeliveryAddress?.pincode || parsedDeliveryAddress?.zipcode || null;
         }
-        
+
         // Final fallback to customer address, then defaults
         const addressData = {
           addressLine1: addressLine1 || (customer.address && customer.address.length > 0 ? customer.address[0].street : null) || "N/A",
@@ -853,7 +868,7 @@ landmark, } = req.body;
           state: addressState || (customer.address && customer.address.length > 0 ? customer.address[0].state : null) || "Tamil Nadu",
           pincode: addressPincode || (customer.address && customer.address.length > 0 ? customer.address[0].pincode : null) || "600091",
         };
-        
+
         // Final validation - ensure no undefined or empty required fields
         if (!addressData.addressLine1 || addressData.addressLine1 === "N/A" || addressData.addressLine1.trim() === '') {
           addressData.addressLine1 = "N/A";
@@ -867,7 +882,7 @@ landmark, } = req.body;
         if (!addressData.pincode || addressData.pincode.trim() === '') {
           addressData.pincode = "600091";
         }
-        
+
         console.log('✅ Final addressData:', addressData);
 
         // Use delivery person name and phone if provided, otherwise use customer details
@@ -921,7 +936,7 @@ landmark, } = req.body;
         // Calculate estimated delivery date (5-7 days from now)
         const estimatedDeliveryDate = new Date();
         estimatedDeliveryDate.setDate(estimatedDeliveryDate.getDate() + 6);
-        
+
         // Create shipment record in database (matching Shipment model schema)
         const shipment = new Shipment({
           orderId: order._id,
@@ -969,20 +984,20 @@ landmark, } = req.body;
 
         await shipment.save();
         console.log('✅ Shipment record created in database:', shipment._id);
-        
+
         // Call BVC tracking API to get DocketTrackList and update trackingHistory
         // Use trackingNumber as docketNo if available
         if (trackingNumber && trackingNumber.trim() !== '') {
           try {
             console.log('🔍 Calling BVC trackShipment for docket:', trackingNumber);
             const trackingData = await bvcService.trackShipment(trackingNumber);
-            
+
             if (trackingData && trackingData.success) {
               // Update shipment with BVC tracking data
               shipment.docketNo = trackingData.docketNo || trackingNumber;
               shipment.bvcStatus = trackingData.status;
               shipment.bvcTrackingCode = trackingData.statusCode;
-              
+
               // Map BVC orderStatus to valid Shipment model status enum
               // Shipment model accepts: PENDING, CREATED, PICKUP_SCHEDULED, PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, FAILED, RTO_INITIATED, RTO_IN_TRANSIT, RTO_DELIVERED, CANCELLED
               const statusMap = {
@@ -1000,11 +1015,11 @@ landmark, } = req.body;
                 'PENDING': 'PENDING',
                 'CREATED': 'CREATED',
               };
-              
-              const mappedStatus = trackingData.orderStatus 
+
+              const mappedStatus = trackingData.orderStatus
                 ? (statusMap[trackingData.orderStatus] || shipment.status)
                 : shipment.status;
-              
+
               // Only update if mapped status is valid for Shipment model
               const validStatuses = ['PENDING', 'CREATED', 'PICKUP_SCHEDULED', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED', 'RTO_INITIATED', 'RTO_IN_TRANSIT', 'RTO_DELIVERED', 'CANCELLED'];
               if (validStatuses.includes(mappedStatus)) {
@@ -1012,7 +1027,7 @@ landmark, } = req.body;
               } else {
                 console.warn(`⚠️ Invalid status from BVC: ${trackingData.orderStatus}, keeping current status: ${shipment.status}`);
               }
-              
+
               // Add DocketTrackList to trackingHistory
               if (trackingData.trackingHistory && trackingData.trackingHistory.length > 0) {
                 // Merge with existing tracking history (avoid duplicates)
@@ -1026,32 +1041,32 @@ landmark, } = req.body;
                   timestamp: entry.timestamp ? new Date(entry.timestamp) : new Date(),
                   updatedBy: 'BVC System',
                 }));
-                
+
                 // Combine and remove duplicates based on timestamp and status
                 const combinedHistory = [...existingHistory, ...newHistoryEntries];
-                const uniqueHistory = combinedHistory.filter((entry, index, self) => 
-                  index === self.findIndex((e) => 
-                    e.timestamp?.getTime() === entry.timestamp?.getTime() && 
+                const uniqueHistory = combinedHistory.filter((entry, index, self) =>
+                  index === self.findIndex((e) =>
+                    e.timestamp?.getTime() === entry.timestamp?.getTime() &&
                     e.status === entry.status
                   )
                 );
-                
+
                 // Sort by timestamp (oldest first)
                 uniqueHistory.sort((a, b) => {
                   const timeA = a.timestamp?.getTime() || 0;
                   const timeB = b.timestamp?.getTime() || 0;
                   return timeA - timeB;
                 });
-                
+
                 shipment.trackingHistory = uniqueHistory;
               }
-              
+
               // Store raw BVC tracking response
               shipment.bvcTrackResponse = trackingData.rawResponse;
-              
+
               await shipment.save();
               console.log('✅ Shipment tracking history updated from BVC');
-              
+
               // Update order status with DocketStatus
               if (trackingData.orderStatus) {
                 // Map BVC order status to order model status enum
@@ -1069,10 +1084,10 @@ landmark, } = req.body;
                   'RTO_DELIVERED': 'RETURNED',
                   'PROCESSING': 'CONFIRMED',
                 };
-                
+
                 const mappedStatus = statusMap[trackingData.orderStatus] || order.status;
                 // Only update if the mapped status is valid for the order model
-                const validStatuses = ['PLACED', 'CONFIRMED', 'SHIPPED', 'DELIVERED', 'FAILED','CANCELLED','RETURNED', 'REFUNDED', 'RETURN_IN_PROGRESS', 'REFUND_IN_PROGRESS'];
+                const validStatuses = ['PLACED', 'CONFIRMED', 'SHIPPED', 'DELIVERED', 'FAILED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'RETURN_IN_PROGRESS', 'REFUND_IN_PROGRESS'];
                 if (validStatuses.includes(mappedStatus) && mappedStatus !== order.status) {
                   order.status = mappedStatus;
                   await order.save();
@@ -1089,7 +1104,7 @@ landmark, } = req.body;
         } else {
           console.log('⚠️ No tracking number available, skipping BVC tracking');
         }
-    
+
         // Update order with shipment reference (optional)
         order.shipmentId = shipment._id;
         await order.save();
@@ -1186,7 +1201,7 @@ landmark, } = req.body;
               }
             }
           });
-          
+
           // If still no weight, try to get from product's direct weight field
           if (weight === 0 && product.weight) {
             weight = parseFloat(product.weight) || 0;
@@ -1195,7 +1210,7 @@ landmark, } = req.body;
           // Use the cart price as the FINAL price (it already includes GST, making charges, discounts)
           const cartItemPrice = orderItem.price || 0;
           const finalPrice = cartItemPrice * orderItem.quantity;
-          
+
           // For display - multiply by quantity
           const gst = gstValue * orderItem.quantity;
           const discount = discountValue * orderItem.quantity;
@@ -1232,7 +1247,7 @@ landmark, } = req.body;
 
         // Use the cart's totalAmount as the grand total - this is what customer agreed to pay
         const grandTotal = totalAmount;
-        
+
         // Calculate totals for display from extracted values
         const totalWeight = products.reduce((sum, p) => sum + (p.weight || 0), 0);
         const totalGST = products.reduce((sum, p) => sum + (p.gst || 0), 0);
@@ -1245,7 +1260,7 @@ landmark, } = req.body;
         const now = new Date();
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth() + 1; // 1-12
-        
+
         // Financial year starts in April (month 4)
         let financialYearStart, financialYearEnd;
         if (currentMonth >= 4) {
@@ -1257,20 +1272,20 @@ landmark, } = req.body;
           financialYearStart = currentYear - 1;
           financialYearEnd = currentYear;
         }
-        
+
         const financialYear = `${financialYearStart}-${String(financialYearEnd).slice(-2)}`;
-        
+
         // Count invoices for current financial year
         const financialYearStartDate = new Date(financialYearStart, 3, 1); // April 1
         const financialYearEndDate = new Date(financialYearEnd, 2, 31, 23, 59, 59); // March 31
-        
+
         const invoiceCount = await Invoice.countDocuments({
           createdAt: {
             $gte: financialYearStartDate,
             $lte: financialYearEndDate
           }
         });
-        
+
         const sequence = String(invoiceCount + 1).padStart(5, '0');
         const invoiceNumber = `PGINV/${financialYear}/${sequence}`;
 
@@ -1365,6 +1380,8 @@ landmark, } = req.body;
           },
           shippingDetails: {
             method: 'standard',
+            shippingPrice: parseFloat(req.body.shippingPrice || req.body.shippingAmount || 0) || 0,
+            shippingAmount: parseFloat(req.body.shippingPrice || req.body.shippingAmount || 0) || 0,
             shippingAddress: shippingAddressData // Save shipping address
           },
           status: 'sent', // Mark as sent since it's being emailed
@@ -1378,18 +1395,21 @@ landmark, } = req.body;
         // Send order confirmation email with invoice PDF
         try {
           console.log('📧 Starting email with invoice PDF for order:', order.orderCode);
-          
+
+          // Get shipping amount from request or invoice
+          const shippingAmount = parseFloat(req.body.shippingPrice || req.body.shippingAmount || invoice.shippingDetails?.shippingPrice || invoice.shippingDetails?.shippingAmount || 0) || 0;
+
           // Generate invoice PDF
           const pdfBuffer = await generateOrderInvoicePDF(invoice, customerDetails, products, {
-            subtotal, totalMakingCharges, totalGST, totalDiscount, grandTotal
+            subtotal, totalMakingCharges, totalGST, totalDiscount, grandTotal, shippingAmount
           });
-          
+
           // Prepare email content
           const emailSubject = `Order Confirmation - ${order.orderCode} | Precious Goldsmith`;
           const emailHtml = generateOrderConfirmationEmailHTML(order, customer, products, {
             subtotal, totalMakingCharges, totalGST, totalDiscount, grandTotal
           }, invoice.invoiceNumber);
-          
+
           // Send email with PDF attachment
           await sendEmailWithAttachment(
             customer.email,
@@ -1399,7 +1419,7 @@ landmark, } = req.body;
             pdfBuffer,
             `Invoice-${invoice.invoiceNumber}.pdf`
           );
-          
+
           console.log(`✅ Order confirmation email with invoice sent to ${customer.email}`);
         } catch (emailError) {
           console.error('❌ Error sending order confirmation email:', emailError?.message || emailError);
@@ -1420,7 +1440,7 @@ landmark, } = req.body;
         const Invoice = require('../models/invoice_model');
         const invoice = await Invoice.findOne({ orderId: order._id });
         const invoiceNumber = invoice ? invoice.invoiceNumber : 'N/A';
-        
+
         await sendWhatsAppMessage(
           customer.phone,
           order.orderCode,
@@ -1449,16 +1469,16 @@ const createReturnRefundRequest = async (req, res) => {
 
     // Validate input
     if (!orderId || !requestType || !items || items.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        error: "Missing required fields: orderId, requestType, and items are required" 
+      return res.status(400).json({
+        success: false,
+        error: "Missing required fields: orderId, requestType, and items are required"
       });
     }
 
     if (!['return', 'refund'].includes(requestType.toLowerCase())) {
-      return res.status(400).json({ 
-        success: false, 
-        error: "requestType must be either 'return' or 'refund'" 
+      return res.status(400).json({
+        success: false,
+        error: "requestType must be either 'return' or 'refund'"
       });
     }
 
@@ -1469,17 +1489,17 @@ const createReturnRefundRequest = async (req, res) => {
     }
 
     if (order.user.toString() !== userId.toString()) {
-      return res.status(403).json({ 
-        success: false, 
-        error: "You don't have permission to return/refund this order" 
+      return res.status(403).json({
+        success: false,
+        error: "You don't have permission to return/refund this order"
       });
     }
 
     // Check if order is eligible for return/refund (not already returned/refunded)
     if (['RETURNED', 'REFUNDED'].includes(order.status)) {
-      return res.status(400).json({ 
-        success: false, 
-        error: `Order is already ${order.status.toLowerCase()}` 
+      return res.status(400).json({
+        success: false,
+        error: `Order is already ${order.status.toLowerCase()}`
       });
     }
 
@@ -1491,29 +1511,29 @@ const createReturnRefundRequest = async (req, res) => {
     for (const item of items) {
       const orderItem = order.items.find((oi) => {
         // Handle both populated and unpopulated productDataid
-        const productId = oi.productDataid._id 
-          ? oi.productDataid._id.toString() 
+        const productId = oi.productDataid._id
+          ? oi.productDataid._id.toString()
           : oi.productDataid.toString();
         return productId === item.productId;
       });
 
       if (!orderItem) {
-        return res.status(400).json({ 
-          success: false, 
-          error: `Product ${item.productId} not found in order` 
+        return res.status(400).json({
+          success: false,
+          error: `Product ${item.productId} not found in order`
         });
       }
 
       if (item.qty > orderItem.quantity) {
-        return res.status(400).json({ 
-          success: false, 
-          error: `Requested quantity (${item.qty}) exceeds ordered quantity (${orderItem.quantity}) for product ${item.productId}` 
+        return res.status(400).json({
+          success: false,
+          error: `Requested quantity (${item.qty}) exceeds ordered quantity (${orderItem.quantity}) for product ${item.productId}`
         });
       }
 
       // Get productId for ReturnRequest (use ObjectId)
-      const productIdForRequest = orderItem.productDataid._id 
-        ? orderItem.productDataid._id 
+      const productIdForRequest = orderItem.productDataid._id
+        ? orderItem.productDataid._id
         : orderItem.productDataid;
 
       validItems.push({
@@ -1533,7 +1553,7 @@ const createReturnRefundRequest = async (req, res) => {
         // Fallback to product selling price if order item price is not available
         itemUnitPrice = orderItem.productDataid.sellingprice;
       }
-      
+
       const itemRefundAmount = itemUnitPrice * item.qty;
       totalRefundAmount += itemRefundAmount;
     }
@@ -1569,9 +1589,9 @@ const createReturnRefundRequest = async (req, res) => {
       await order.save();
     }
 
-    res.status(201).json({ 
-      success: true, 
-      message: `${requestType} request created successfully`, 
+    res.status(201).json({
+      success: true,
+      message: `${requestType} request created successfully`,
       returnRequest: {
         id: returnRequest._id,
         orderId: returnRequest.orderId,
@@ -1676,7 +1696,8 @@ const getAllOrdersAdmin = async (req, res) => {
       filter.$or = [
         { orderId: { $regex: search, $options: 'i' } },
         { 'user.name': { $regex: search, $options: 'i' } },
-        { 'user.email': { $regex: search, $options: 'i' } }
+        { 'user.email': { $regex: search, $options: 'i' } },
+        { 'user.phone': { $regex: search, $options: 'i' } }
       ];
     }
 
@@ -1788,9 +1809,11 @@ const getAllProductOrdersAdmin = async (req, res) => {
 
     if (search) {
       filter.$or = [
+        { orderCode: { $regex: search, $options: 'i' } },
         { orderId: { $regex: search, $options: 'i' } },
         { 'user.name': { $regex: search, $options: 'i' } },
         { 'user.email': { $regex: search, $options: 'i' } },
+        { 'user.phone': { $regex: search, $options: 'i' } },
         { 'items.productDataid.name': { $regex: search, $options: 'i' } }
       ];
     }
@@ -1895,7 +1918,7 @@ const getAllProductOrdersAdmin = async (req, res) => {
 
 
 // 1️⃣ Generate Access Token
-const  generateTokenPhonePe = async (req, res) => {
+const generateTokenPhonePe = async (req, res) => {
   try {
     const requestHeaders = {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -2047,7 +2070,7 @@ const getAllReturnRefundRequestsAdmin = async (req, res) => {
     } = req.query;
 
     const ReturnRequest = require('../models/returnRequest');
-    
+
     // Build filter object
     const filter = {};
 
@@ -2094,9 +2117,9 @@ const getAllReturnRefundRequestsAdmin = async (req, res) => {
         const orderCode = request.orderId?.orderCode?.toLowerCase() || '';
         const userName = request.userId?.name?.toLowerCase() || '';
         const userEmail = request.userId?.email?.toLowerCase() || '';
-        return orderCode.includes(searchLower) || 
-               userName.includes(searchLower) || 
-               userEmail.includes(searchLower);
+        return orderCode.includes(searchLower) ||
+          userName.includes(searchLower) ||
+          userEmail.includes(searchLower);
       });
     }
 
@@ -2110,16 +2133,16 @@ const getAllReturnRefundRequestsAdmin = async (req, res) => {
       {
         $group: {
           _id: null,
-          totalRefundAmount: { 
-            $sum: { 
-              $ifNull: ['$refundAmount', 0] 
-            } 
+          totalRefundAmount: {
+            $sum: {
+              $ifNull: ['$refundAmount', 0]
+            }
           },
           totalRequests: { $sum: 1 },
-          averageRefundAmount: { 
-            $avg: { 
-              $ifNull: ['$refundAmount', 0] 
-            } 
+          averageRefundAmount: {
+            $avg: {
+              $ifNull: ['$refundAmount', 0]
+            }
           }
         }
       }
@@ -2138,10 +2161,10 @@ const getAllReturnRefundRequestsAdmin = async (req, res) => {
         $group: {
           _id: '$status',
           count: { $sum: 1 },
-          totalRefundAmount: { 
-            $sum: { 
-              $ifNull: ['$refundAmount', 0] 
-            } 
+          totalRefundAmount: {
+            $sum: {
+              $ifNull: ['$refundAmount', 0]
+            }
           }
         }
       }
@@ -2220,10 +2243,10 @@ const acceptReturnRefundRequest = async (req, res) => {
 
     // Update order status when return/refund is approved
     // Handle both populated and unpopulated orderId
-    const orderId = returnRequest.orderId._id 
-      ? returnRequest.orderId._id.toString() 
+    const orderId = returnRequest.orderId._id
+      ? returnRequest.orderId._id.toString()
       : returnRequest.orderId.toString();
-    
+
     const order = await productOrder.findById(orderId);
     if (order) {
       const totalOrderedQty = order.items.reduce((sum, item) => sum + item.quantity, 0);
@@ -2284,7 +2307,7 @@ const getReturnRefundRequestByOrderId = async (req, res) => {
     }
 
     const ReturnRequest = require('../models/returnRequest');
-    
+
     // Find return request for this order and user (get the latest one)
     const returnRequests = await ReturnRequest
       .find({ orderId: orderId, userId: userId })
@@ -2292,7 +2315,7 @@ const getReturnRefundRequestByOrderId = async (req, res) => {
       .populate('items.productId', 'name brand images')
       .sort({ createdAt: -1 })
       .limit(1);
-    
+
     const returnRequest = returnRequests.length > 0 ? returnRequests[0] : null;
 
     if (!returnRequest) {
@@ -2345,7 +2368,7 @@ const getUserReturnRefundHistory = async (req, res) => {
     } = req.query;
 
     const ReturnRequest = require('../models/returnRequest');
-    
+
     // Build filter object
     const filter = { userId: userId };
 
@@ -2413,8 +2436,8 @@ const getUserReturnRefundHistory = async (req, res) => {
           if (typeof item.productId === 'object' && item.productId.name) {
             // Product is populated
             productName = item.productId.name || 'Unknown Product';
-            productImage = (item.productId.images && item.productId.images.length > 0) 
-              ? item.productId.images[0] 
+            productImage = (item.productId.images && item.productId.images.length > 0)
+              ? item.productId.images[0]
               : '';
             productPrice = item.productId.sellingprice || 0;
             productId = item.productId._id || item.productId;
@@ -2423,7 +2446,7 @@ const getUserReturnRefundHistory = async (req, res) => {
             productId = item.productId._id || item.productId;
           }
         }
-        
+
         // If we still don't have product data, try fallbacks
         if (productName === 'Unknown Product') {
           // Fallback: Try to get product from order items
@@ -2431,11 +2454,11 @@ const getUserReturnRefundHistory = async (req, res) => {
             const itemProductIdStr = productId?.toString();
             const orderItem = request.orderId.items.find(oi => {
               if (!oi.productDataid) return false;
-              
-              const oiProductId = oi.productDataid._id 
-                ? oi.productDataid._id.toString() 
+
+              const oiProductId = oi.productDataid._id
+                ? oi.productDataid._id.toString()
                 : oi.productDataid.toString();
-              
+
               return oiProductId === itemProductIdStr;
             });
 
@@ -2573,12 +2596,12 @@ const rejectReturnRefundRequest = async (req, res) => {
 const getInvestmentOrdersByMonth = (async (req, res) => {
   try {
     const { months = 12 } = req.query; // Default to last 12 months
-    
+
     // Calculate date range
     const endDate = new Date();
     const startDate = new Date();
     startDate.setMonth(startDate.getMonth() - parseInt(months));
-    
+
     // Aggregate investment orders by month, separated by gold and silver
     const monthlyData = await transactionSchema.aggregate([
       {
@@ -2620,12 +2643,12 @@ const getInvestmentOrdersByMonth = (async (req, res) => {
         }
       }
     ]);
-    
+
     // Get all months in the range
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const monthsList = [];
     const currentDate = new Date(startDate);
-    
+
     while (currentDate <= endDate) {
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth() + 1;
@@ -2638,19 +2661,19 @@ const getInvestmentOrdersByMonth = (async (req, res) => {
       });
       currentDate.setMonth(currentDate.getMonth() + 1);
     }
-    
+
     // Initialize data structure
     const goldData = new Array(monthsList.length).fill(0);
     const silverData = new Array(monthsList.length).fill(0);
     const goldOrderCounts = new Array(monthsList.length).fill(0);
     const silverOrderCounts = new Array(monthsList.length).fill(0);
-    
+
     // Fill in the data
     monthlyData.forEach(item => {
-      const monthIndex = monthsList.findIndex(m => 
+      const monthIndex = monthsList.findIndex(m =>
         m.year === item._id.year && m.month === item._id.month
       );
-      
+
       if (monthIndex !== -1) {
         if (item._id.type === 'GOLD') {
           goldData[monthIndex] = item.totalValue || 0;
@@ -2661,7 +2684,7 @@ const getInvestmentOrdersByMonth = (async (req, res) => {
         }
       }
     });
-    
+
     // Format response
     const chartData = {
       categories: monthsList.map(m => m.label),
@@ -2684,7 +2707,7 @@ const getInvestmentOrdersByMonth = (async (req, res) => {
         totalSilverOrders: silverOrderCounts.reduce((sum, val) => sum + val, 0)
       }
     };
-    
+
     res.status(200).json({
       status: true,
       message: "Investment orders by month fetched successfully",
@@ -2989,7 +3012,7 @@ const sendOrderWhatsAppMessage = async (req, res) => {
       "+917092053592",
       "PGCOM-1764065481098-94200",
       "1764065481098-94200",
-       0
+      0
     );
 
     if (result.success) {
@@ -3021,7 +3044,7 @@ const sendOrderWhatsAppMessage = async (req, res) => {
 };
 
 module.exports = {
-  placeOrder, returnOrder, refundOrder, createReturnRefundRequest, getOrderHistory,generateTokenPhonePe,createOrderPhonePe,checkPhonePeOrderStatus,
+  placeOrder, returnOrder, refundOrder, createReturnRefundRequest, getOrderHistory, generateTokenPhonePe, createOrderPhonePe, checkPhonePeOrderStatus,
   buyOrSellGold,
   getAllOrderHistory,
   getUserOrderHistory,

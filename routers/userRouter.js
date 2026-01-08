@@ -1,5 +1,5 @@
 const asyncHandler = require("express-async-handler");
-const { updateTicketStatus, getTicketById, getMyTickets, createTicket, addToWishlist, removeFromWishlist, getWishlist, updateuserById, getuserById, getAllUser, addAddress, getAddresses, deleteAddress, deleteuserById, setTransactionPin, verifyTransactionPin, updateAddress, getuserByIds, getAllTickets, getTicketByIdAdmin, updateTicketStatusAdmin, getTicketStats, addTicketReply, getReferredUsers, getReferralStats } = require("../controller/userContoller")
+const { updateTicketStatus, getTicketById, getMyTickets, createTicket, addToWishlist, removeFromWishlist, getWishlist, updateuserById, getuserById, getAllUser, addAddress, getAddresses, deleteAddress, deleteuserById, setTransactionPin, verifyTransactionPin, updateAddress, getuserByIds, getAllTickets, getTicketByIdAdmin, updateTicketStatusAdmin, getTicketStats, addTicketReply, getReferredUsers, getReferralStats, sendWhatsAppMessageToCustomer } = require("../controller/userContoller")
 const express = require("express");
 const multer = require('multer');
 const { isAuth } = require("../middleware/tokenValidation");
@@ -12,7 +12,11 @@ router.route("/getAllUser").get(getAllUser);
 router.route("/getuserById").get(isAuth, getuserById);
 router.route("/getuserByIds/:id").get( getuserByIds);
 router.route("/updateuserById/:id").post(updateuserById);
+router.route("/updateUser/:id").put(updateuserById);
+router.route("/updateUser/:id").post(updateuserById); // Keep POST for backward compatibility
 router.route("/deleteuserById/:id").post(deleteuserById);
+router.route("/deleteUser/:id").delete(deleteuserById);
+router.route("/deleteUser/:id").post(deleteuserById); // Keep POST for backward compatibility
 // router.route("/set-transaction-pin").post(isAuth, setTransactionPin);
 // router.route("/verify-transaction-pin").post(isAuth, verifyTransactionPin);
 
@@ -48,6 +52,9 @@ router.route("/admin/addTicketReply/:id").post(isAuth, addTicketReply);
 // Admin referral routes
 router.route("/admin/getReferredUsers").get(isAuth, getReferredUsers);
 router.route("/admin/getReferralStats").get(isAuth, getReferralStats);
+
+// Admin send WhatsApp message to customer
+router.route("/admin/sendWhatsAppMessage").post(isAuth, sendWhatsAppMessageToCustomer);
 
 module.exports = router;
 
