@@ -202,20 +202,14 @@ const generateInvestmentInvoicePdf = async (invoiceData) => {
                       customerStateStr.includes('TN') ||
                       isTamilNaduAddress(customerAddrStr);
 
-  // Calculate CGST and SGST (split equally) or IGST
+  // Calculate CGST and SGST (split equally) or IGST (no rounding)
   const finalGst = parseFloat(gstAmount) || 0;
   const cgstAmount = isTamilNadu ? (finalGst / 2) : 0;
   const sgstAmount = isTamilNadu ? (finalGst / 2) : 0;
   const igstAmount = isTamilNadu ? 0 : finalGst;
   
-  // Calculate round off for GST (always round UP to maximum end)
-  const roundedGst = Math.ceil(finalGst);
-  const roundOff = roundedGst - finalGst;
-  // Only show roundoff if positive (upperside only)
-  const showRoundoff = roundOff > 0;
-  
-  // Calculate final total with roundoff added
-  const finalTotalWithRoundoff = parseFloat(totalAmount) + (showRoundoff ? roundOff : 0);
+  // Use actual total amount without roundoff
+  const finalTotal = parseFloat(totalAmount) || 0;
 
   const docDefinition = {
     pageSize: 'A4',
@@ -293,7 +287,7 @@ const generateInvestmentInvoicePdf = async (invoiceData) => {
             ]
           }
         ],
-        margin: [0, 0, 0, 25]
+        margin: [0, 0, 0, 15]
       },
 
       // Horizontal line
@@ -364,17 +358,15 @@ const generateInvestmentInvoicePdf = async (invoiceData) => {
             width: '50%',
             stack: isTamilNadu ? [
               { text: `CGST (1.5%) : ` + formatAmt(cgstAmount), fontSize: 9, color: '#333', margin: [0, 0, 0, 5] },
-              { text: `SGST (1.5%) : ` + formatAmt(sgstAmount), fontSize: 9, color: '#333', margin: [0, 0, 0, 5] },
-              showRoundoff ? { text: `Roundoff : ` + formatAmt(roundOff), fontSize: 9, color: '#333' } : { text: '', fontSize: 9 }
+              { text: `SGST (1.5%) : ` + formatAmt(sgstAmount), fontSize: 9, color: '#333' }
             ] : [
-              { text: `IGST (3%) : ` + formatAmt(igstAmount), fontSize: 9, color: '#333', margin: [0, 0, 0, 5] },
-              showRoundoff ? { text: `Roundoff : ` + formatAmt(roundOff), fontSize: 9, color: '#333' } : { text: '', fontSize: 9 }
+              { text: `IGST (3%) : ` + formatAmt(igstAmount), fontSize: 9, color: '#333' }
             ]
           },
           {
             width: '50%',
             stack: [
-              { text: 'Total GST Amount: ' + formatAmt(roundedGst), fontSize: 9, bold: true, color: '#333', alignment: 'right', margin: [0, 0, 0, 5] },
+              { text: 'Total GST Amount: ' + formatAmt(finalGst), fontSize: 9, bold: true, color: '#333', alignment: 'right', margin: [0, 0, 0, 5] },
               { text: isTamilNadu ? `(CGST + SGST: 3%)` : `(IGST: 3%)`, fontSize: 8, color: '#666', alignment: 'right' }
             ]
           }
@@ -417,12 +409,12 @@ const generateInvestmentInvoicePdf = async (invoiceData) => {
                 {
                   ul: [
                     { text: 'We declare that the above quantity of goods are kept by the seller in a secure vault and the same is insured by the seller. The seller shall be liable to pay the customer the value of the goods in case of any loss or damage to the goods.', fontSize: 8, color: '#555', margin: [0, 0, 0, 5] },
-                    { text: 'It can be delivered in a form of a minted coin upon request as per the Terms and Conditions.', fontSize: 8, color: '#555' }
+                    // { text: 'It can be delivered in a form of a minted coin upon request as per the Terms and Conditions.', fontSize: 8, color: '#555' }
                   ],
                   markerColor: '#555'
                 }
               ],
-              margin: [12, 12, 12, 12]
+              margin: [10, 12, 12, 10]
             }
           ]]
         },
@@ -432,7 +424,7 @@ const generateInvestmentInvoicePdf = async (invoiceData) => {
           vLineColor: () => goldColor,
           fillColor: () => grayBg
         },
-        margin: [0, 0, 0, 20]
+        margin: [0, 0, 0, 15]
       },
 
       // Total Amount Payable (only for buy orders with GST)
@@ -443,7 +435,7 @@ const generateInvestmentInvoicePdf = async (invoiceData) => {
             {
               stack: [
                 { text: 'Total Amount Payable', alignment: 'center', fontSize: 10, color: '#555', margin: [0, 12, 0, 6] },
-                { text: formatAmt(finalTotalWithRoundoff), fontSize: 20, bold: true, color: goldColor, alignment: 'center', margin: [0, 0, 0, 12] }
+                { text: formatAmt(finalTotal), fontSize: 20, bold: true, color: goldColor, alignment: 'center', margin: [0, 0, 0, 12] }
               ]
             }
           ]]
@@ -455,8 +447,8 @@ const generateInvestmentInvoicePdf = async (invoiceData) => {
           vLineColor: () => '#CCCCCC',
           fillColor: () => lightGoldBg
         },
-        margin: [0, 0, 0, 30]
-      } : { text: '', fontSize: 9, margin: [0, 0, 0, 30] },
+        margin: [0, 0, 0, 15]
+      } : { text: '', fontSize: 9, margin: [0, 0, 0, 15] },
 
       // Authorized Signatory - Right aligned
       // {
@@ -688,19 +680,13 @@ const generateOrderInvoicePdf = async (invoiceData) => {
   // Determine if GST should be split (Tamil Nadu) or shown as IGST (other states)
   const isTamilNadu = isTamilNaduAddress(billing) || isTamilNaduAddress(shipping);
   
-  // Calculate CGST and SGST (split equally) or IGST
+  // Calculate CGST and SGST (split equally) or IGST from ACTUAL GST (no rounding)
   const cgstAmount = isTamilNadu ? (finalGst / 2) : 0;
   const sgstAmount = isTamilNadu ? (finalGst / 2) : 0;
   const igstAmount = isTamilNadu ? 0 : finalGst;
   
-  // Calculate round off for GST (always round UP to maximum end)
-  const roundedGst = Math.ceil(finalGst);
-  const roundOff = roundedGst - finalGst;
-  // Only show roundoff if positive (upperside only)
-  const showRoundoff = roundOff > 0;
-  
-  // Calculate final total including shipping and roundoff
-  const finalTotalWithShipping = finalTotal + (parseFloat(shippingAmount) || 0) + (showRoundoff ? roundOff : 0);
+  // Calculate final total: total value + shipping (no rounding)
+  const finalTotalWithShipping = finalTotal + (parseFloat(shippingAmount) || 0);
 
   const docDefinition = {
     pageSize: 'A4',
@@ -726,10 +712,10 @@ const generateOrderInvoicePdf = async (invoiceData) => {
       { text: 'Email: contact@preciousgoldsmith.com | Website: preciousgoldsmith.com', fontSize: 7, color: '#666', alignment: 'center', margin: [0, 0, 0, 15] },
 
       // Horizontal line
-      { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 525, y2: 0, lineWidth: 1, lineColor: '#333' }], margin: [0, 0, 0, 20] },
+      { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 525, y2: 0, lineWidth: 1, lineColor: '#333' }], margin: [0, 0, 0, 14] },
 
       // TAX INVOICE title
-      { text: 'TAX INVOICE', fontSize: 14, bold: true, decoration: 'underline', alignment: 'center', margin: [0, 0, 0, 20] },
+      { text: 'TAX INVOICE', fontSize: 14, bold: true, decoration: 'underline', alignment: 'center', margin: [0, 0, 0, 14] },
 
       // Invoice Details - 2 columns with better spacing
       {
@@ -744,7 +730,7 @@ const generateOrderInvoicePdf = async (invoiceData) => {
           {
             width: '50%',
             stack: [
-              { text: [{ text: 'Order No:  ', bold: true }, orderNum], fontSize: 9, alignment: 'right', margin: [0, 0, 0, 6] },
+              // { text: [{ text: 'Order ID:  ', bold: true }, orderNum], fontSize: 9, alignment: 'right', margin: [0, 0, 0, 6] },
               { text: [{ text: 'Order Date:  ', bold: true }, formatDateLong(orderDate || createdAt)], fontSize: 9, alignment: 'right' }
             ]
           }
@@ -773,7 +759,7 @@ const generateOrderInvoicePdf = async (invoiceData) => {
             ]
           }
         ],
-        margin: [0, 0, 0, 25]
+        margin: [0, 0, 0, 20]
       },
 
       // Products Table
@@ -820,14 +806,13 @@ const generateOrderInvoicePdf = async (invoiceData) => {
             width: '50%',
             stack: [
               { text: `CGST (1.5%) : ` + formatAmt(cgstAmount), fontSize: 9, color: '#333', margin: [0, 0, 0, 5] },
-              { text: `SGST (1.5%) : ` + formatAmt(sgstAmount), fontSize: 9, color: '#333', margin: [0, 0, 0, 5] },
-              showRoundoff ? { text: `Roundoff : ` + formatAmt(roundOff), fontSize: 9, color: '#333' } : { text: '', fontSize: 9 }
+              { text: `SGST (1.5%) : ` + formatAmt(sgstAmount), fontSize: 9, color: '#333', margin: [0, 0, 0, 5] }
             ]
           },
           {
             width: '50%',
             stack: [
-              { text: 'Total GST Amount: ' + formatAmt(roundedGst), fontSize: 9, bold: true, color: '#333', alignment: 'right', margin: [0, 0, 0, 5] },
+              { text: 'Total GST Amount: ' + formatAmt(finalGst), fontSize: 9, bold: true, color: '#333', alignment: 'right', margin: [0, 0, 0, 5] },
               { text: `(CGST + SGST: 3%)`, fontSize: 8, color: '#666', alignment: 'right' }
             ]
           }
@@ -838,14 +823,13 @@ const generateOrderInvoicePdf = async (invoiceData) => {
           {
             width: '50%',
             stack: [
-              { text: `IGST (3%) : ` + formatAmt(igstAmount), fontSize: 9, color: '#333', margin: [0, 0, 0, 5] },
-              showRoundoff ? { text: `Roundoff : ` + formatAmt(roundOff), fontSize: 9, color: '#333' } : { text: '', fontSize: 9 }
+              { text: `IGST (3%) : ` + formatAmt(igstAmount), fontSize: 9, color: '#333', margin: [0, 0, 0, 5] }
             ]
           },
           {
             width: '50%',
             stack: [
-              { text: 'Total GST Amount: ' + formatAmt(roundedGst), fontSize: 9, bold: true, color: '#333', alignment: 'right' }
+              { text: 'Total GST Amount: ' + formatAmt(finalGst), fontSize: 9, bold: true, color: '#333', alignment: 'right' }
             ]
           }
         ],
@@ -853,23 +837,42 @@ const generateOrderInvoicePdf = async (invoiceData) => {
       },
       
       // Shipping Amount
-      parseFloat(shippingAmount) > 0 ? {
-        columns: [
-          {
-            width: '50%',
-            text: 'Shipping Charges: ' + formatAmt(shippingAmount),
-            fontSize: 9,
-            color: '#333',
-            margin: [0, 0, 0, 20]
-          },
-          {
-            width: '50%',
-            text: '',
-            fontSize: 9
-          }
-        ],
-        margin: [0, 0, 0, 20]
-      } : { text: '', fontSize: 9, margin: [0, 0, 0, 20] },
+      // parseFloat(shippingAmount) > 0 ? {
+      //   columns: [
+      //     {
+      //       width: '50%',
+      //       text: 'Shipping Charges: ' + formatAmt(shippingAmount), bold: true,  alignment: 'right',
+      //       fontSize: 9,
+      //       color: '#333',
+      //       margin: [0, 0, 0, 20]
+      //     },
+      //     {
+      //       width: '50%',
+      //       text: '',
+      //       fontSize: 9
+      //     }
+      //   ],
+      //   margin: [0, 0, 0, 20]
+      // } : { text: '', fontSize: 9, margin: [0, 0, 0, 20] },
+      // Shipping Amount — aligned with Total GST Amount
+parseFloat(shippingAmount) > 0 ? {
+  columns: [
+    {
+      width: '50%',
+      text: '' // empty left column to match GST layout
+    },
+    {
+      width: '50%',
+      text: 'Shipping Charges: ' + formatAmt(shippingAmount),
+      fontSize: 9,
+      bold: true,
+      color: '#333',
+      alignment: 'right',
+      margin: [0, 0, 0, 20]
+    }
+  ]
+} : { text: '', margin: [0, 0, 0, 20] },
+
       // Invoice Amount and Total Amount Payable
       {
         columns: [
@@ -904,73 +907,127 @@ const generateOrderInvoicePdf = async (invoiceData) => {
         margin: [0, 0, 0, 25]
       },
 
-      // Terms and Conditions with gold left border
-      {
-        table: {
-          widths: ['*'],
-          body: [[
-            {
-              stack: [
-                { text: 'Terms and Conditions:', fontSize: 10, bold: true, margin: [0, 0, 0, 10] },
-                {
-                  ol: [
-                    { text: 'Refer our app/website for our detailed terms and policies.', fontSize: 8, color: '#444', margin: [0, 0, 0, 4] },
-                    { text: 'Subject to Chennai Jurisdiction.', fontSize: 8, color: '#444', margin: [0, 0, 0, 4] },
-                    { text: 'Weight tolerance of ±0.020 g per product is considered normal due to measurement fluctuations.', fontSize: 8, color: '#444', margin: [0, 0, 0, 4] },
-                    { text: 'Any of our products sold can be verified for purity at any BIS-recognised Assaying & Hallmarking Centre.', fontSize: 8, color: '#444' }
-                  ]
-                }
-              ],
-              margin: [10, 12, 10, 12]
-            }
-          ]]
-        },
-        layout: {
-          hLineWidth: () => 0,
-          vLineWidth: (i) => i === 0 ? 3 : 0,
-          vLineColor: () => goldColor,
-          fillColor: () => grayBg
-        },
-        margin: [0, 0, 0, 25]
-      },
-
-      // Authorized Signatory
+      // // Terms and Conditions with gold left border
       // {
-      //   columns: [
-      //     { width: '*', text: '' },
-      //     {
-      //       width: 'auto',
-      //       stack: [
-      //         { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 150, y2: 0, lineWidth: 0.5, lineColor: '#333' }] },
-      //         { text: 'Authorised Signatory', fontSize: 9, bold: true, alignment: 'right', margin: [0, 6, 0, 2] },
-      //         { text: 'KSAN Industries LLP', fontSize: 8, color: '#555', alignment: 'right' }
-      //       ]
-      //     }
-      //   ],
+      //   table: {
+      //     widths: ['*'],
+      //     body: [[
+      //       {
+      //         stack: [
+      //           { text: 'Terms and Conditions:', fontSize: 10, bold: true, margin: [0, 0, 0, 10] },
+      //           {
+      //             ol: [
+      //               { text: 'Refer our app/website for our detailed terms and policies.', fontSize: 8, color: '#444', margin: [0, 0, 0, 4] },
+      //               { text: 'Subject to Chennai Jurisdiction.', fontSize: 8, color: '#444', margin: [0, 0, 0, 4] },
+      //               { text: 'Weight tolerance of ±0.020 g per product is considered normal due to measurement fluctuations.', fontSize: 8, color: '#444', margin: [0, 0, 0, 4] },
+      //               { text: 'Any of our products sold can be verified for purity at any BIS-recognised Assaying & Hallmarking Centre.', fontSize: 8, color: '#444' }
+      //             ]
+      //           }
+      //         ],
+      //         margin: [10, 12, 10, 12]
+      //       }
+      //     ]]
+      //   },
+      //   layout: {
+      //     hLineWidth: () => 0,
+      //     vLineWidth: (i) => i === 0 ? 3 : 0,
+      //     vLineColor: () => goldColor,
+      //     fillColor: () => grayBg
+      //   },
       //   margin: [0, 0, 0, 25]
       // },
 
-      // Footer
+      // // Authorized Signatory
+      // // {
+      // //   columns: [
+      // //     { width: '*', text: '' },
+      // //     {
+      // //       width: 'auto',
+      // //       stack: [
+      // //         { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 150, y2: 0, lineWidth: 0.5, lineColor: '#333' }] },
+      // //         { text: 'Authorised Signatory', fontSize: 9, bold: true, alignment: 'right', margin: [0, 6, 0, 2] },
+      // //         { text: 'KSAN Industries LLP', fontSize: 8, color: '#555', alignment: 'right' }
+      // //       ]
+      // //     }
+      // //   ],
+      // //   margin: [0, 0, 0, 25]
+      // // },
+
+      // // Footer
+      // {
+      //   table: {
+      //     widths: ['*'],
+      //     body: [[
+      //       {
+      //         stack: [
+      //           { text: 'Thank you for choosing Precious Goldsmith', fontSize: 9, bold: true, alignment: 'center', margin: [0, 0, 0, 6] },
+      //           { text: 'For queries: support@preciousgoldsmith.com', fontSize: 8, alignment: 'center', color: '#555', margin: [0, 0, 0, 6] },
+      //           { text: 'This is a computer-generated invoice. No signature required.', fontSize: 7, color: '#888', alignment: 'center' }
+      //         ],
+      //         margin: [0, 15, 0, 15]
+      //       }
+      //     ]]
+      //   },
+      //   layout: {
+      //     hLineWidth: () => 0,
+      //     vLineWidth: () => 0,
+      //     fillColor: () => grayBg
+      //   }
+      // }
+
       {
-        table: {
-          widths: ['*'],
-          body: [[
-            {
-              stack: [
-                { text: 'Thank you for choosing Precious Goldsmith', fontSize: 9, bold: true, alignment: 'center', margin: [0, 0, 0, 6] },
-                { text: 'For queries: support@preciousgoldsmith.com', fontSize: 8, alignment: 'center', color: '#555', margin: [0, 0, 0, 6] },
-                { text: 'This is a computer-generated invoice. No signature required.', fontSize: 7, color: '#888', alignment: 'center' }
-              ],
-              margin: [0, 15, 0, 15]
-            }
-          ]]
-        },
-        layout: {
-          hLineWidth: () => 0,
-          vLineWidth: () => 0,
-          fillColor: () => grayBg
-        }
+  stack: [
+    // Terms and Conditions
+    {
+      table: {
+        widths: ['*'],
+        body: [[
+          {
+            stack: [
+              { text: 'Terms and Conditions:', fontSize: 10, bold: true, margin: [0, 0, 0, 6] },
+              {
+                ol: [
+                  { text: 'Refer our app/website for our detailed terms and policies.', fontSize: 8, margin: [0, 0, 0, 6] },
+                  { text: 'Subject to Chennai Jurisdiction.', fontSize: 8, margin: [0, 0, 0, 6] },
+                  { text: 'Weight tolerance of ±0.020 g per product is considered normal.', fontSize: 8, margin: [0, 0, 0, 6] },
+                  { text: 'Products can be verified at any BIS-recognised centre.', fontSize: 8, margin: [0, 0, 0, 6] }
+                ]
+              }
+            ],
+            margin: [0, 10, 10, 10]
+          }
+        ]]
+      },
+      layout: {
+        hLineWidth: () => 0,
+        vLineWidth: (i) => i === 0 ? 3 : 0,
+        vLineColor: () => goldColor,
+        fillColor: () => grayBg
       }
+    },
+
+    // Footer
+    {
+      table: {
+        widths: ['*'],
+        body: [[
+          {
+            stack: [
+              { text: 'Thank you for choosing Precious Goldsmith', fontSize: 9, bold: true, alignment: 'center', margin: [0, 6, 0, 4] },
+              { text: 'For queries: support@preciousgoldsmith.com', fontSize: 8, alignment: 'center',margin: [0, 0, 0, 5] },
+              // { text: 'This is a computer-generated invoice. No signature required.', fontSize: 7, color: '#777', alignment: 'center' }
+            ],
+            margin: [0, 8, 0, 8]
+          }
+        ]]
+      },
+      layout: 'noBorders'
+    }
+  ],
+  unbreakable: true,   
+  margin: [0, 0, 0, 10]
+}
+
     ]
   };
 

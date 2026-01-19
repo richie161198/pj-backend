@@ -38,33 +38,108 @@ const addProduct = expressAsyncHandler(async (req, res) => {
       // Admin manually entered gold/silver in price details, keep them
       // Just calculate the totals
       try {
-        const priceDetails = product.priceDetails || [];
-        let total = 0;
+        let priceDetails = product.priceDetails || [];
+        
+        // Extract individual components (not calculated totals)
+        let goldValue = 0;
+        let silverValue = 0;
+        let stonesValue = 0;
+        let makingCharges = 0;
+        let discountValue = 0;
+        let gstValue = 0;
+        let otherValue = 0;
         
         priceDetails.forEach(item => {
-          if (!item.name?.toLowerCase().includes('total') && 
-              !item.name?.toLowerCase().includes('grand')) {
-            total += parseFloat(item.value) || 0;
+          const name = item.name?.toLowerCase() || '';
+          const value = parseFloat(item.value) || 0;
+          
+          // Skip system calculated entries
+          if (name.includes('grand total') || 
+              name.includes('roundoff') || 
+              name.includes('round off') || 
+              name.includes('round-off') ||
+              name.includes('sub total') ||
+              name.includes('subtotal after discount') ||
+              name.includes('subtotal after')) {
+            return; // Skip these calculated entries
+          }
+          
+          // Categorize items
+          if (name.includes('gold')) {
+            goldValue = value;
+          } else if (name.includes('silver')) {
+            silverValue = value;
+          } else if (name.includes('making charges') || name.includes('making')) {
+            makingCharges = value;
+          } else if (name.includes('discount')) {
+            discountValue = value;
+          } else if (name.includes('gst')) {
+            gstValue = value;
+          } else if (name.includes('stone') || name.includes('diamond') || 
+                     name.includes('ruby') || name.includes('emerald') || 
+                     name.includes('sapphire') || name.includes('pearl')) {
+            stonesValue += value;
+          } else if (!name.includes('total') && !name.includes('grand')) {
+            // Other custom items (not totals)
+            otherValue += value;
           }
         });
         
-        // Update or add Grand Total
+        // Calculate: (Gold + Silver + Stones + Other + Making Charges) - Discount + GST
+        const subtotal = goldValue + silverValue + stonesValue + otherValue + makingCharges;
+        const subtotalAfterDiscount = subtotal - discountValue;
+        const grandTotalBeforeRoundoff = subtotalAfterDiscount + gstValue;
+        
+        // Round up the Grand Total to the nearest whole number
+        const roundedTotal = Math.ceil(grandTotalBeforeRoundoff);
+        const roundOff = roundedTotal - grandTotalBeforeRoundoff;
+        
+        // Remove ALL existing roundoff entries (there might be multiple)
+        priceDetails = priceDetails.filter(item => {
+          const name = item.name?.toLowerCase() || '';
+          return !name.includes('roundoff') && 
+                 !name.includes('round off') && 
+                 !name.includes('round-off');
+        });
+        
+        // Find grand total index AFTER filtering (index might have changed)
         const grandTotalIndex = priceDetails.findIndex(item => 
           item.name?.toLowerCase().includes('grand total')
         );
         
+        // Update or add Grand Total
         if (grandTotalIndex >= 0) {
-          priceDetails[grandTotalIndex].value = total;
+          // If roundoff exists, insert it before grand total
+          if (roundOff > 0) {
+            priceDetails.splice(grandTotalIndex, 0, {
+              name: 'Roundoff',
+              weight: 'Rounding',
+              value: roundOff
+            });
+            // Update grand total at the next index
+            priceDetails[grandTotalIndex + 1].value = roundedTotal;
+          } else {
+            // Just update grand total value
+            priceDetails[grandTotalIndex].value = roundedTotal;
+          }
         } else {
+          // Add roundoff before grand total if it exists
+          if (roundOff > 0) {
+            priceDetails.push({
+              name: 'Roundoff',
+              weight: 'Rounding',
+              value: roundOff
+            });
+          }
           priceDetails.push({
             name: 'Grand Total',
             weight: 'Final Price',
-            value: total
+            value: roundedTotal
           });
         }
         
         product.priceDetails = priceDetails;
-        product.sellingprice = total;
+        product.sellingprice = roundedTotal;
         
         console.log('Manual price details kept with calculated total:', total);
       } catch (e) {
@@ -151,33 +226,108 @@ const updateProduct = expressAsyncHandler(async (req, res) => {
       // Admin manually entered gold/silver in price details, keep them
       // Just calculate the totals
       try {
-        const priceDetails = updatedProduct.priceDetails || [];
-        let total = 0;
+        let priceDetails = updatedProduct.priceDetails || [];
+        
+        // Extract individual components (not calculated totals)
+        let goldValue = 0;
+        let silverValue = 0;
+        let stonesValue = 0;
+        let makingCharges = 0;
+        let discountValue = 0;
+        let gstValue = 0;
+        let otherValue = 0;
         
         priceDetails.forEach(item => {
-          if (!item.name?.toLowerCase().includes('total') && 
-              !item.name?.toLowerCase().includes('grand')) {
-            total += parseFloat(item.value) || 0;
+          const name = item.name?.toLowerCase() || '';
+          const value = parseFloat(item.value) || 0;
+          
+          // Skip system calculated entries
+          if (name.includes('grand total') || 
+              name.includes('roundoff') || 
+              name.includes('round off') || 
+              name.includes('round-off') ||
+              name.includes('sub total') ||
+              name.includes('subtotal after discount') ||
+              name.includes('subtotal after')) {
+            return; // Skip these calculated entries
+          }
+          
+          // Categorize items
+          if (name.includes('gold')) {
+            goldValue = value;
+          } else if (name.includes('silver')) {
+            silverValue = value;
+          } else if (name.includes('making charges') || name.includes('making')) {
+            makingCharges = value;
+          } else if (name.includes('discount')) {
+            discountValue = value;
+          } else if (name.includes('gst')) {
+            gstValue = value;
+          } else if (name.includes('stone') || name.includes('diamond') || 
+                     name.includes('ruby') || name.includes('emerald') || 
+                     name.includes('sapphire') || name.includes('pearl')) {
+            stonesValue += value;
+          } else if (!name.includes('total') && !name.includes('grand')) {
+            // Other custom items (not totals)
+            otherValue += value;
           }
         });
         
-        // Update or add Grand Total
+        // Calculate: (Gold + Silver + Stones + Other + Making Charges) - Discount + GST
+        const subtotal = goldValue + silverValue + stonesValue + otherValue + makingCharges;
+        const subtotalAfterDiscount = subtotal - discountValue;
+        const grandTotalBeforeRoundoff = subtotalAfterDiscount + gstValue;
+        
+        // Round up the Grand Total to the nearest whole number
+        const roundedTotal = Math.ceil(grandTotalBeforeRoundoff);
+        const roundOff = roundedTotal - grandTotalBeforeRoundoff;
+        
+        // Remove ALL existing roundoff entries (there might be multiple)
+        priceDetails = priceDetails.filter(item => {
+          const name = item.name?.toLowerCase() || '';
+          return !name.includes('roundoff') && 
+                 !name.includes('round off') && 
+                 !name.includes('round-off');
+        });
+        
+        // Find grand total index AFTER filtering (index might have changed)
         const grandTotalIndex = priceDetails.findIndex(item => 
           item.name?.toLowerCase().includes('grand total')
         );
         
+        // Update or add Grand Total
         if (grandTotalIndex >= 0) {
-          priceDetails[grandTotalIndex].value = total;
+          // If roundoff exists, insert it before grand total
+          if (roundOff > 0) {
+            priceDetails.splice(grandTotalIndex, 0, {
+              name: 'Roundoff',
+              weight: 'Rounding',
+              value: roundOff
+            });
+            // Update grand total at the next index
+            priceDetails[grandTotalIndex + 1].value = roundedTotal;
+          } else {
+            // Just update grand total value
+            priceDetails[grandTotalIndex].value = roundedTotal;
+          }
         } else {
+          // Add roundoff before grand total if it exists
+          if (roundOff > 0) {
+            priceDetails.push({
+              name: 'Roundoff',
+              weight: 'Rounding',
+              value: roundOff
+            });
+          }
           priceDetails.push({
             name: 'Grand Total',
             weight: 'Final Price',
-            value: total
+            value: roundedTotal
           });
         }
         
         updatedProduct.priceDetails = priceDetails;
-        updatedProduct.sellingprice = total;
+        updatedProduct.sellingprice = roundedTotal;
         await updatedProduct.save();
         
         console.log('Manual price details saved with calculated total:', total);
@@ -551,13 +701,46 @@ const checkout = expressAsyncHandler(async (req, res) => {
 // Create Category
 const createCategory = expressAsyncHandler(async (req, res) => {
   try {
-    const { name, description, image, newTag} = req.body;
+    const { name, image, newTag } = req.body;
 
-    const category = new Category({ name, description, image, newTag });
+    if (!name) {
+      return res.status(400).json({ status: false, message: 'Category name is required' });
+    }
+
+    const category = new Category({ name, image, newTag: newTag || false });
     await category.save();
 
     res.status(201).json({ status: true, category });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ status: false, message: 'Category name already exists' });
+    }
+    res.status(500).json({ status: false, message: error.message });
+  }
+});
+
+// Update Category
+const updateCategory = expressAsyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, image, newTag } = req.body;
+
+    const category = await Category.findById(id);
+    if (!category) {
+      return res.status(404).json({ status: false, message: 'Category not found' });
+    }
+
+    if (name) category.name = name;
+    if (image !== undefined) category.image = image;
+    if (newTag !== undefined) category.newTag = newTag;
+
+    await category.save();
+
+    res.status(200).json({ status: true, category });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ status: false, message: 'Category name already exists' });
+    }
     res.status(500).json({ status: false, message: error.message });
   }
 });
@@ -627,7 +810,7 @@ const getCategoryWithProducts = expressAsyncHandler(async (req, res) => {
 
 
 module.exports = {
-  addProduct, addToCart, removeFromCart, getCart, clearCart, checkout, createCategory, getAllCategories, getCategoryWithProducts,
+  addProduct, addToCart, removeFromCart, getCart, clearCart, checkout, createCategory, updateCategory, getAllCategories, getCategoryWithProducts,
   updateProduct,
   deleteProduct,
   getAllProducts,

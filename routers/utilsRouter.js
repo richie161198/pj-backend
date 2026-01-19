@@ -1,5 +1,5 @@
 const asyncHandler = require("express-async-handler");
-const { getGoldPrice, getbanners, uploadimages, sendMailotp, createInvestmentSettings, getInvestmentSettings, updateAllProductPricesManually, updateSingleProductPrice, getProductPriceBreakdown, getInvestmentOption, updateInvestmentOption } = require("../controller/utilsController");
+const { getGoldPrice, getbanners, uploadimages, sendMailotp, createInvestmentSettings, getInvestmentSettings, updateAllProductPricesManually, updateSingleProductPrice, getProductPriceBreakdown, getInvestmentOption, updateInvestmentOption, getAppointmentOption, updateAppointmentOption } = require("../controller/utilsController");
 const { getPolicyByType, getAllPolicies, createOrUpdatePolicy, deletePolicy } = require("../controller/policyController");
 const express = require("express");
 const multer = require('multer');
@@ -16,6 +16,10 @@ router.route("/admin/createinvestmentSettings").post(adminAuth, createInvestment
 // Investment Option Routes
 router.route("/investmentOption").get(getInvestmentOption);
 router.route("/admin/investmentOption").put(adminAuth, updateInvestmentOption);
+
+// Appointment Option Routes
+router.route("/appointmentOption").get(getAppointmentOption);
+router.route("/admin/appointmentOption").put(adminAuth, updateAppointmentOption);
 
 // Product Price Update Routes - Admin Protected
 router.route("/admin/updateAllProductPrices").post(adminAuth, updateAllProductPricesManually);

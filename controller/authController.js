@@ -78,20 +78,67 @@ const signUpRequest = asyncHandler(async (req, res) => {
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
         <title>Welcome to Precious Goldsmith</title>
+        <style>
+          @media only screen and (max-width: 600px) {
+            .email-container {
+              width: 100% !important;
+              max-width: 100% !important;
+            }
+            .email-content {
+              padding: 20px 15px !important;
+            }
+            .email-header {
+              padding: 30px 20px !important;
+            }
+            .email-title {
+              font-size: 22px !important;
+            }
+            .email-subtitle {
+              font-size: 12px !important;
+            }
+            .otp-box {
+              padding: 20px 15px !important;
+            }
+            .otp-code {
+              font-size: 32px !important;
+              letter-spacing: 8px !important;
+              padding: 12px 20px !important;
+            }
+            .benefits-section {
+              padding: 20px 15px !important;
+            }
+            .footer-content {
+              padding: 20px 15px !important;
+            }
+            .footer-text {
+              font-size: 10px !important;
+            }
+            table[class="responsive-table"] {
+              width: 100% !important;
+            }
+            td[class="responsive-cell"] {
+              display: block !important;
+              width: 100% !important;
+              text-align: left !important;
+              padding: 10px 0 !important;
+            }
+          }
+        </style>
       </head>
       <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
         <table role="presentation" style="width: 100%; border-collapse: collapse;">
           <tr>
-            <td align="center" style="padding: 40px 0;">
-              <table role="presentation" style="width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);">
+            <td align="center" style="padding: 20px 10px;">
+              <table role="presentation" class="email-container" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);">
                 
                 <!-- Header with Gold Gradient -->
                 <tr>
-                  <td style="background: linear-gradient(135deg, #f5f5f5 0%, #f5f5f5 100%); padding: 40px 30px; text-align: center;">
-          ${logoBase64 ? `<img src="https://res.cloudinary.com/ddfnarfsb/image/upload/v1765179970/WhatsApp_Image_2025-11-26_at_6.14.48_PM-removebg-preview_euia6w.png" alt="Precious Goldsmith" style="width: 80px; height: auto; margin-bottom: 15px;"/>` : '<div style="font-size: 48px; font-weight: bold; color: #D4AF37; margin-bottom: 15px;">PG</div>'}
-                    <h1 style="margin: 0; color: #333; font-size: 28px; font-weight: bold;">Precious Goldsmith</h1>
-                    <p style="margin: 10px 0 0; color: #555; font-size: 14px;">Digital Gold & Silver Investment Platform</p>
+                  <td class="email-header" style="background: linear-gradient(135deg, #f5f5f5 0%, #f5f5f5 100%); padding: 40px 30px; text-align: center;">
+          ${logoBase64 ? `<img src="https://res.cloudinary.com/ddfnarfsb/image/upload/v1765179970/WhatsApp_Image_2025-11-26_at_6.14.48_PM-removebg-preview_euia6w.png" alt="Precious Goldsmith" style="width: 80px; max-width: 100%; height: auto; margin-bottom: 15px;"/>` : '<div style="font-size: 48px; font-weight: bold; color: #D4AF37; margin-bottom: 15px;">PG</div>'}
+                    <h1 class="email-title" style="margin: 0; color: #333; font-size: 28px; font-weight: bold;">Precious Goldsmith</h1>
+                    <p class="email-subtitle" style="margin: 10px 0 0; color: #555; font-size: 14px;">Digital Gold & Silver Investment Platform</p>
                   </td>
                 </tr>
 
@@ -104,7 +151,7 @@ const signUpRequest = asyncHandler(async (req, res) => {
 
                 <!-- Main Content -->
                 <tr>
-                  <td style="padding: 40px 30px;">
+                  <td class="email-content" style="padding: 40px 30px;">
                     <p style="margin: 0 0 20px; color: #333; font-size: 18px; line-height: 1.6;">
                       Dear <strong style="color: #d4a574;">${name || "Valued Customer"}</strong>,
                     </p>
@@ -120,10 +167,10 @@ const signUpRequest = asyncHandler(async (req, res) => {
                     <!-- OTP Box -->
                     <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 30px 0;">
                       <tr>
-                        <td align="center">
-                          <div style="background: linear-gradient(135deg, #f9f4ef 0%, #fff8f0 100%); border: 2px solid #E9BE8C; border-radius: 12px; padding: 30px; display: inline-block;">
+                        <td align="center" style="padding: 0 10px;">
+                          <div class="otp-box" style="background: linear-gradient(135deg, #f9f4ef 0%, #fff8f0 100%); border: 2px solid #E9BE8C; border-radius: 12px; padding: 30px; display: inline-block; max-width: 100%;">
                             <p style="margin: 0 0 10px; color: #666; font-size: 14px; text-transform: uppercase; letter-spacing: 2px;">Your Verification Code</p>
-                            <div style="font-size: 42px; font-weight: bold; color: #333; letter-spacing: 12px; font-family: 'Courier New', monospace; background: #E9BE8C; padding: 15px 30px; border-radius: 8px;">
+                            <div class="otp-code" style="font-size: 42px; font-weight: bold; color: #333; letter-spacing: 12px; font-family: 'Courier New', monospace; background: #E9BE8C; padding: 15px 30px; border-radius: 8px; word-break: break-all;">
                               ${otp}
                             </div>
                             <p style="margin: 15px 0 0; color: #999; font-size: 12px;">
@@ -135,7 +182,7 @@ const signUpRequest = asyncHandler(async (req, res) => {
                     </table>
 
                     <!-- Benefits Section -->
-                    <div style="background: #f9f9f9; border-radius: 10px; padding: 25px; margin: 25px 0;">
+                    <div class="benefits-section" style="background: #f9f9f9; border-radius: 10px; padding: 25px; margin: 25px 0;">
                       <h3 style="margin: 0 0 20px; color: #333; font-size: 16px; border-bottom: 2px solid #E9BE8C; padding-bottom: 10px;">
                         Why Choose Precious Goldsmith?
                       </h3>
@@ -183,14 +230,14 @@ const signUpRequest = asyncHandler(async (req, res) => {
 
                 <!-- Footer -->
                 <tr>
-                  <td style="padding: 30px; text-align: center; background: #fafafa;">
+                  <td class="footer-content" style="padding: 30px; text-align: center; background: #fafafa;">
                     <p style="margin: 0 0 15px; color: #333; font-size: 14px; font-weight: bold;">
                       Start Building Your Golden Future Today!
                     </p>
                     <p style="margin: 0 0 10px; color: #888; font-size: 12px;">
                       Questions? Contact us at <a href="mailto:support@preciousgoldsmith.com" style="color: #d4a574; text-decoration: none;">support@preciousgoldsmith.com</a>
                     </p>
-                    <p style="margin: 0; color: #aaa; font-size: 11px;">
+                    <p class="footer-text" style="margin: 0; color: #aaa; font-size: 11px;">
                       Precious Goldsmith | KSAN Industries LLP<br>
                       New No:46, Old No:70/1, Bazullah Road, T Nagar, Chennai - 600017
                     </p>

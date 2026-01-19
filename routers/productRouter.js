@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
-const { addProduct, updateProduct,checkout, deleteProduct, getAllProducts,deleteCategory,createCategory, getAllCategories, getCategoryWithProducts, bulkUploadProducts,addToCart, removeFromCart, decrementCartItem, getCart, getProductById, getCategoryById } = require('../controller/productController');
+const { addProduct, updateProduct,checkout, deleteProduct, getAllProducts,deleteCategory,createCategory, updateCategory, getAllCategories, getCategoryWithProducts, bulkUploadProducts,addToCart, removeFromCart, decrementCartItem, getCart, getProductById, getCategoryById } = require('../controller/productController');
 const { isAuth } = require('../middleware/tokenValidation');
 
 const router = express.Router();
@@ -32,6 +32,7 @@ router.route("/removecart").post(isAuth,removeFromCart);
 router.route("/decrementcart").post(isAuth,decrementCartItem);
 
 router.route("/createCategory").post(isAuth,createCategory);
+router.route("/updateCategory/:id").put(isAuth,updateCategory);
 router.route("/getAllCategories").get(getAllCategories);
 router.route("/getCategoryById/:id").get(getCategoryById);
 router.delete('/deleteCategory/:id', deleteCategory);

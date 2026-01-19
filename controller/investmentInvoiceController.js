@@ -201,7 +201,7 @@ const getAllInvoices = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .limit(limit * 1)
     .skip((page - 1) * limit)
-    .populate('userId', 'name email phone');
+    .populate('userId', 'name email phone state address');
 
   const count = await InvestmentInvoice.countDocuments(query);
 

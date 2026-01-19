@@ -1,3 +1,6 @@
 node_modules
 .env
-.dockerignore
+.gitignore
+.DS_Store
+npm-debug.log
+yarn-error.log

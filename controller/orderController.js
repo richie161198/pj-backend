@@ -30,13 +30,19 @@ const twilioClient = twilio(
 
 // WhatsApp Content Template SID
 // const WHATSAPP_TEMPLATE_SID = "HXf4af99bd1ba1e9a90b4b5fb2a872d441";
-const WHATSAPP_TEMPLATE_SID = "HXf40a829bf471a210c132870232e28a42";
+// const WHATSAPP_TEMPLATE_SID = "HXea79ea3fb953907d6fcd2280bf605270";
+const WHATSAPP_TEMPLATE_SID = process.env.WHATSAPP_TEMPLATE_SID
 
 // Helper function to send WhatsApp message using Content Template
 async function sendWhatsAppMessage(phoneNumber, orderCode, invoiceNumber, totalAmount) {
   try {
+    console.log(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN
+);
     // Format phone number (ensure it starts with +91 for India)
     let formattedPhone = phoneNumber;
+    // let formattedPhone = "7092053592";
     if (!formattedPhone.startsWith('+')) {
       // Remove any leading zeros or country code if present
       formattedPhone = formattedPhone.replace(/^0+/, '').replace(/^91/, '');
@@ -45,19 +51,31 @@ async function sendWhatsAppMessage(phoneNumber, orderCode, invoiceNumber, totalA
       formattedPhone = `whatsapp:${formattedPhone}`;
     }
 
-    console.log(`📱 Sending WhatsApp message to: ${formattedPhone}`);
+    console.log(`📱 Sending WhatsApp message to: ${formattedPhone} ${orderCode}`);
 
     // Send WhatsApp message using Content Template
     const message = await twilioClient.messages.create({
-      from: `whatsapp:+919933661149`,
+      // from: `whatsapp:+919933661149`,
+      from: `whatsapp:+918248419009`,
       to: formattedPhone,
       contentSid: WHATSAPP_TEMPLATE_SID,
       contentVariables: JSON.stringify({
-        "1": orderCode,           // Order Code
-        "2": invoiceNumber,        // Invoice Number
-        "3": `₹${parseFloat(totalAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` // Total Amount
+        "1": orderCode,           
+        // "2": invoiceNumber,       
+        // "3": `₹${parseFloat(totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` // Total Amount
       })
     });
+//     const message = await twilioClient.messages.create({
+//   from: "whatsapp:+918248419009",
+//   to: formattedPhone,
+//   // contentSid: WHATSAPP_TEMPLATE_SID,
+//   contentSid: "HXf4af99bd1ba1e9a90b4b5fb2a872d441",
+//   contentVariables: JSON.stringify({
+//     "first_name": "rajkumar",
+//     "orderNo.": "INV987796"
+//   })
+// });
+
 
     console.log(`✅ WhatsApp message sent successfully. SID: ${message.sid} ${message.body}`);
     return { success: true, messageSid: message.sid };
@@ -88,13 +106,73 @@ function generateOrderConfirmationEmailHTML(order, customer, products, pricing, 
   `).join('');
 
   return `
-    <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
-      <div style="background: linear-gradient(135deg, #D4AF37 0%, #F4E4BC 100%); padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
-        <h1 style="color: #1a1a1a; margin: 0; font-size: 28px;">Order Confirmed! 🎉</h1>
-        <p style="color: #333; margin: 10px 0 0; font-size: 16px;">Thank you for shopping with Precious Goldsmith</p>
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta http-equiv="X-UA-Compatible" content="IE=edge">
+      <style>
+        @media only screen and (max-width: 600px) {
+          .email-wrapper {
+            padding: 10px !important;
+          }
+          .email-container {
+            max-width: 100% !important;
+            padding: 15px !important;
+          }
+          .email-header {
+            padding: 20px 15px !important;
+          }
+          .email-title {
+            font-size: 22px !important;
+          }
+          .email-subtitle {
+            font-size: 14px !important;
+          }
+          .email-content {
+            padding: 20px 15px !important;
+          }
+          .order-info-box {
+            padding: 15px !important;
+          }
+          .order-info-table td {
+            display: block !important;
+            width: 100% !important;
+            text-align: left !important;
+            padding: 5px 0 !important;
+          }
+          .order-info-table td:last-child {
+            margin-bottom: 10px;
+          }
+          .products-table {
+            font-size: 13px !important;
+          }
+          .products-table td {
+            padding: 10px 5px !important;
+            font-size: 12px !important;
+          }
+          .total-box {
+            padding: 15px !important;
+          }
+          .total-box table {
+            font-size: 14px !important;
+          }
+          .info-box {
+            padding: 12px !important;
+            font-size: 13px !important;
+          }
+        }
+      </style>
+    </head>
+    <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+    <div class="email-wrapper" style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+      <div class="email-header" style="background: linear-gradient(135deg, #D4AF37 0%, #F4E4BC 100%); padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
+        <h1 class="email-title" style="color: #1a1a1a; margin: 0; font-size: 28px;">Order Confirmed! 🎉</h1>
+        <p class="email-subtitle" style="color: #333; margin: 10px 0 0; font-size: 16px;">Thank you for shopping with Precious Goldsmith</p>
       </div>
       
-      <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+      <div class="email-content" style="background-color: #ffffff; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
         <p style="font-size: 16px; color: #333; margin-bottom: 20px;">
           Dear <strong>${customer.name || 'Valued Customer'}</strong>,
         </p>
@@ -103,8 +181,8 @@ function generateOrderConfirmationEmailHTML(order, customer, products, pricing, 
         </p>
         
         <!-- Order Info Box -->
-        <div style="background: linear-gradient(135deg, #f8f4e8 0%, #fff9e6 100%); padding: 20px; border-radius: 10px; margin: 25px 0; border-left: 4px solid #D4AF37;">
-          <table style="width: 100%;">
+        <div class="order-info-box" style="background: linear-gradient(135deg, #f8f4e8 0%, #fff9e6 100%); padding: 20px; border-radius: 10px; margin: 25px 0; border-left: 4px solid #D4AF37;">
+          <table class="order-info-table" style="width: 100%;">
             <tr>
               <td style="padding: 5px 0;">
                 <span style="color: #666;">Order Number:</span><br>
@@ -125,35 +203,41 @@ function generateOrderConfirmationEmailHTML(order, customer, products, pricing, 
         </div>
         
         <!-- Products Table -->
-        <h3 style="color: #333; border-bottom: 2px solid #D4AF37; padding-bottom: 10px; margin-top: 30px;">Order Items</h3>
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+        <h3 style="color: #333; border-bottom: 2px solid #D4AF37; padding-bottom: 10px; margin-top: 30px; font-size: 18px;">Order Items</h3>
+        <table class="products-table" style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
           ${productRows}
         </table>
         
         <!-- Total Summary - Simple display since cart prices are final (include GST, charges, discounts) -->
-        <div style="background-color: #f9f9f9; padding: 20px; border-radius: 10px; margin-top: 20px;">
+        <div class="total-box" style="background-color: #f9f9f9; padding: 20px; border-radius: 10px; margin-top: 20px;">
           <table style="width: 100%;">
+            ${pricing.shippingAmount > 0 ? `
+            <tr>
+              <td style="padding: 10px 0; font-size: 16px; color: #666;">Shipping Charges:</td>
+              <td style="padding: 10px 0; text-align: right; font-size: 16px; color: #333;">${formatCurrency(pricing.shippingAmount)}</td>
+            </tr>
+            ` : ''}
             <tr style="border-top: 2px solid #D4AF37;">
-              <td style="padding: 15px 0 8px; font-weight: bold; font-size: 18px; color: #333;">Total Amount:</td>
-              <td style="padding: 15px 0 8px; text-align: right; font-weight: bold; font-size: 20px; color: #D4AF37;">${formatCurrency(pricing.grandTotal)}</td>
+              <td style="padding: 15px 0 8px; font-weight: bold; font-size: 18px; color: #333;">Grand Total:</td>
+              <td style="padding: 15px 0 8px; text-align: right; font-weight: bold; font-size: 20px; color: #D4AF37;">${formatCurrency(pricing.finalTotal || (parseFloat(pricing.grandTotal || 0) + parseFloat(pricing.shippingAmount || 0)))}</td>
             </tr>
           </table>
           <p style="margin: 10px 0 0; font-size: 12px; color: #888; text-align: center;">
-            (Inclusive of all taxes, making charges, and applicable discounts)
+            (Inclusive of all taxes, making charges, shipping, and applicable discounts)
           </p>
         </div>
         
         <!-- Invoice Attachment Note -->
-        <div style="background-color: #e3f2fd; padding: 15px; border-radius: 8px; margin-top: 25px; text-align: center;">
-          <p style="margin: 0; color: #1565c0;">
+        <div class="info-box" style="background-color: #e3f2fd; padding: 15px; border-radius: 8px; margin-top: 25px; text-align: center;">
+          <p style="margin: 0; color: #1565c0; font-size: 14px;">
             📎 <strong>Your tax invoice is attached to this email as a PDF.</strong>
           </p>
         </div>
         
         <!-- Shipping Info -->
-        <div style="margin-top: 25px; padding: 20px; border: 1px dashed #D4AF37; border-radius: 10px;">
-          <h4 style="margin: 0 0 15px; color: #D4AF37;">📦 Shipping Information</h4>
-          <p style="margin: 0; color: #555; line-height: 1.6;">
+        <div class="info-box" style="margin-top: 25px; padding: 20px; border: 1px dashed #D4AF37; border-radius: 10px;">
+          <h4 style="margin: 0 0 15px; color: #D4AF37; font-size: 16px;">📦 Shipping Information</h4>
+          <p style="margin: 0; color: #555; line-height: 1.6; font-size: 14px;">
             Your order will be shipped within 2-3 business days. You will receive a tracking link via email once your order is dispatched.
           </p>
         </div>
@@ -162,7 +246,7 @@ function generateOrderConfirmationEmailHTML(order, customer, products, pricing, 
         <div style="text-align: center; margin-top: 30px; padding-top: 25px; border-top: 1px solid #eee;">
           <p style="color: #666; font-size: 14px; margin-bottom: 10px;">
             Questions about your order? Contact us at<br>
-            <a href="mailto:contact@preciousgoldsmith.com" style="color: #D4AF37;">contact@preciousgoldsmith.com</a>
+            <a href="mailto:contact@preciousgoldsmith.com" style="color: #D4AF37; text-decoration: none;">contact@preciousgoldsmith.com</a>
           </p>
           <p style="font-size: 12px; color: #999; margin-top: 20px;">
             This is an automated email. Please do not reply directly.<br>
@@ -171,6 +255,8 @@ function generateOrderConfirmationEmailHTML(order, customer, products, pricing, 
         </div>
       </div>
     </div>
+    </body>
+    </html>
   `;
 }
 
@@ -413,17 +499,66 @@ const buyOrSellGold = async (req, res) => {
 
         const emailSubject = `${transactionType.toUpperCase()} Purchase Confirmation - Order #${orderId}`;
         const emailHtml = `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
-            <div style="background: linear-gradient(135deg, #D4AF37 0%, #F4E4BC 100%); padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
-              <h1 style="color: #1a1a1a; margin: 0;">Purchase Successful!</h1>
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta http-equiv="X-UA-Compatible" content="IE=edge">
+            <style>
+              @media only screen and (max-width: 600px) {
+                .email-wrapper {
+                  padding: 10px !important;
+                }
+                .email-container {
+                  max-width: 100% !important;
+                  padding: 15px !important;
+                }
+                .email-header {
+                  padding: 15px !important;
+                }
+                .email-title {
+                  font-size: 20px !important;
+                }
+                .email-content {
+                  padding: 20px 15px !important;
+                }
+                .transaction-table {
+                  font-size: 14px !important;
+                }
+                .transaction-table td {
+                  padding: 8px 5px !important;
+                  font-size: 13px !important;
+                }
+                .transaction-table td:first-child {
+                  width: 60% !important;
+                }
+                .transaction-table td:last-child {
+                  width: 40% !important;
+                  text-align: left !important;
+                }
+                .total-row {
+                  font-size: 16px !important;
+                }
+                .info-box {
+                  padding: 12px !important;
+                  font-size: 13px !important;
+                }
+              }
+            </style>
+          </head>
+          <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f9f9f9;">
+          <div class="email-wrapper" style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+            <div class="email-header" style="background: linear-gradient(135deg, #D4AF37 0%, #F4E4BC 100%); padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+              <h1 class="email-title" style="color: #1a1a1a; margin: 0; font-size: 24px;">Purchase Successful!</h1>
             </div>
-            <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-              <p style="font-size: 16px; color: #333;">Dear <strong>${user.name || 'Valued Customer'}</strong>,</p>
-              <p style="font-size: 16px; color: #333;">Your ${transactionType.toUpperCase()} purchase has been completed successfully.</p>
+            <div class="email-content" style="background-color: #ffffff; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+              <p style="font-size: 16px; color: #333; margin: 0 0 10px;">Dear <strong>${user.name || 'Valued Customer'}</strong>,</p>
+              <p style="font-size: 16px; color: #333; margin: 0 0 20px;">Your ${transactionType.toUpperCase()} purchase has been completed successfully.</p>
               
               <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="color: #D4AF37; margin-top: 0; border-bottom: 2px solid #D4AF37; padding-bottom: 10px;">Transaction Details</h3>
-                <table style="width: 100%; border-collapse: collapse;">
+                <h3 style="color: #D4AF37; margin-top: 0; border-bottom: 2px solid #D4AF37; padding-bottom: 10px; font-size: 18px;">Transaction Details</h3>
+                <table class="transaction-table" style="width: 100%; border-collapse: collapse;">
                   <tr>
                     <td style="padding: 10px 0; color: #666; border-bottom: 1px solid #eee;">Order ID:</td>
                     <td style="padding: 10px 0; color: #333; font-weight: bold; text-align: right; border-bottom: 1px solid #eee;">${orderId}</td>
@@ -453,28 +588,30 @@ const buyOrSellGold = async (req, res) => {
                     <td style="padding: 10px 0; color: #333; font-weight: bold; text-align: right; border-bottom: 1px solid #eee;">${Payment_method}</td>
                   </tr>
                   <tr style="background-color: #D4AF37;">
-                    <td style="padding: 15px 10px; color: #1a1a1a; font-weight: bold; font-size: 18px;">Total Amount Paid:</td>
-                    <td style="padding: 15px 10px; color: #1a1a1a; font-weight: bold; text-align: right; font-size: 18px;">₹${parseFloat(inrAmount).toLocaleString('en-IN')}</td>
+                    <td class="total-row" style="padding: 15px 10px; color: #1a1a1a; font-weight: bold; font-size: 18px;">Total Amount Paid:</td>
+                    <td class="total-row" style="padding: 15px 10px; color: #1a1a1a; font-weight: bold; text-align: right; font-size: 18px;">₹${parseFloat(inrAmount).toLocaleString('en-IN')}</td>
                   </tr>
                 </table>
               </div>
               
-              <div style="background-color: #e8f5e9; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                <p style="margin: 0; color: #2e7d32; font-weight: bold;">✓ Your updated ${transactionType.toUpperCase()} balance: ${newGoldBalance} grams</p>
+              <div class="info-box" style="background-color: #e8f5e9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 0; color: #2e7d32; font-weight: bold; font-size: 14px;">✓ Your updated ${transactionType.toUpperCase()} balance: ${newGoldBalance} grams</p>
               </div>
 
-              <div style="background-color: #e3f2fd; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center;">
-                <p style="margin: 0; color: #1565c0;">📎 <strong>Your investment invoice is attached to this email as a PDF.</strong></p>
+              <div class="info-box" style="background-color: #e3f2fd; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center;">
+                <p style="margin: 0; color: #1565c0; font-size: 14px;">📎 <strong>Your investment invoice is attached to this email as a PDF.</strong></p>
               </div>
               
-              <p style="font-size: 14px; color: #666; margin-top: 20px;">Thank you for investing with Precious Goldsmith. Your digital ${transactionType.toLowerCase()} is securely stored in your account.</p>
+              <p style="font-size: 14px; color: #666; margin-top: 20px; line-height: 1.6;">Thank you for investing with Precious Goldsmith. Your digital ${transactionType.toLowerCase()} is securely stored in your account.</p>
               
               <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
-                <p style="font-size: 12px; color: #999;">This is an automated email. Please do not reply.</p>
-                <p style="font-size: 12px; color: #999;">© ${new Date().getFullYear()} Precious Goldsmith. All rights reserved.</p>
+                <p style="font-size: 12px; color: #999; margin: 5px 0;">This is an automated email. Please do not reply.</p>
+                <p style="font-size: 12px; color: #999; margin: 5px 0;">© ${new Date().getFullYear()} Precious Goldsmith. All rights reserved.</p>
               </div>
             </div>
           </div>
+          </body>
+          </html>
         `;
 
         await sendEmailWithAttachment(
@@ -1405,9 +1542,12 @@ const placeOrder = async (req, res) => {
           });
 
           // Prepare email content
+          // Calculate final total: grandTotal (product total) + shipping
+          const finalTotal = parseFloat(grandTotal || 0) + shippingAmount;
+          
           const emailSubject = `Order Confirmation - ${order.orderCode} | Precious Goldsmith`;
           const emailHtml = generateOrderConfirmationEmailHTML(order, customer, products, {
-            subtotal, totalMakingCharges, totalGST, totalDiscount, grandTotal
+            subtotal, totalMakingCharges, totalGST, totalDiscount, grandTotal, shippingAmount, finalTotal
           }, invoice.invoiceNumber);
 
           // Send email with PDF attachment
@@ -1433,6 +1573,7 @@ const placeOrder = async (req, res) => {
       console.error('Error creating automatic invoice:', invoiceError);
       // Don't fail the order if invoice creation fails
     }
+console.log('📱 Sending WhatsApp message to cus=');
 
     // Send WhatsApp message to user
     try {
@@ -1440,7 +1581,7 @@ const placeOrder = async (req, res) => {
         const Invoice = require('../models/invoice_model');
         const invoice = await Invoice.findOne({ orderId: order._id });
         const invoiceNumber = invoice ? invoice.invoiceNumber : 'N/A';
-
+console.log('📱 Sending WhatsApp message to customer:', customer.phone);
         await sendWhatsAppMessage(
           customer.phone,
           order.orderCode,
@@ -1643,12 +1784,51 @@ const refundOrder = async (req, res) => {
   }
 };
 
+const sendWhatsAppMessageApi = async (req, res) => {
+  console.log("Sending WhatsApp message...");
+  try {
+   let response = await sendWhatsAppMessage(
+  "+917092053592",
+  "PGCOM-1764065481098-94200",
+  "1764065481098-94200",
+  2499.50
+);
+    res.json({ success: true, message: "WhatsApp message sent", response });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
 // Get Order History
 const getOrderHistory = async (req, res) => {
   console.log(req.user.id);
   try {
     const orders = await productOrder.find({ user: req.user.id }).sort({ createdAt: -1 }).populate("items.productDataid");
-    res.json({ success: true, orders });
+    
+    // Fetch invoice data for each order to include pricing and shipping details
+    const Invoice = require('../models/invoice_model');
+    const ordersWithInvoiceData = await Promise.all(
+      orders.map(async (order) => {
+        const invoice = await Invoice.findOne({ orderId: order._id });
+        const orderObj = order.toObject();
+        
+        // Include invoice pricing and shipping details if available
+        if (invoice) {
+          orderObj.pricing = invoice.pricing || null;
+          orderObj.shippingDetails = invoice.shippingDetails || null;
+          // Calculate final total including shipping
+          const shippingAmount = invoice.shippingDetails?.shippingPrice || invoice.shippingDetails?.shippingAmount || 0;
+          orderObj.finalTotal = (invoice.pricing?.grandTotal || order.totalAmount) + shippingAmount;
+        } else {
+          // If no invoice, use order totalAmount as finalTotal
+          orderObj.finalTotal = order.totalAmount;
+        }
+        
+        return orderObj;
+      })
+    );
+    
+    res.json({ success: true, orders: ordersWithInvoiceData });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -1826,13 +2006,44 @@ const getAllProductOrdersAdmin = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     // Get product orders with pagination and populate user and product data
-    const orders = await productOrder
+    const ordersRaw = await productOrder
       .find(filter)
       .populate('user', 'name email phone')
       .populate('items.productDataid', 'name brand price images')
       .sort(sort)
       .skip(skip)
       .limit(parseInt(limit));
+
+    // Fetch invoice data for each order to include pricing and shipping details
+    const Invoice = require('../models/invoice_model');
+    
+    const orders = await Promise.all(
+      ordersRaw.map(async (order) => {
+        try {
+          const invoice = await Invoice.findOne({ orderId: order._id });
+          const orderObj = order.toObject();
+          
+          // Include invoice pricing and shipping details if available
+          if (invoice) {
+            orderObj.pricing = invoice.pricing || null;
+            orderObj.shippingDetails = invoice.shippingDetails || null;
+          } else {
+            // If no invoice, set null values
+            orderObj.pricing = null;
+            orderObj.shippingDetails = null;
+          }
+          
+          return orderObj;
+        } catch (err) {
+          // If there's an error processing an order, return it with basic data
+          console.error(`Error processing order ${order._id}:`, err.message);
+          const orderObj = order.toObject();
+          orderObj.pricing = null;
+          orderObj.shippingDetails = null;
+          return orderObj;
+        }
+      })
+    );
 
     // Get total count for pagination
     const totalOrders = await productOrder.countDocuments(filter);
@@ -2957,91 +3168,60 @@ const updateOrderItemHUIDs = async (req, res) => {
 // ==========================
 // SEND WHATSAPP MESSAGE API
 // ==========================
-const sendOrderWhatsAppMessage = async (req, res) => {
+
+
+async function sendWhatsAppMessage3242(phoneNumber, firstName, invoiceNumber) {
   try {
-    const { orderCode, orderId, phoneNumber } = req.body;
+    let formattedPhone = phoneNumber;
 
-    // // Validate input
-    // if (!orderCode && !orderId) {
-    //   return res.status(400).json({
-    //     success: false,
-    //     message: "Either orderCode or orderId is required"
-    //   });
-    // }
-
-    // // Find the order
-    // let order = null;
-    // if (orderCode) {
-    //   order = await productOrder.findOne({ orderCode });
-    // } else if (orderId) {
-    //   order = await productOrder.findById(orderId);
-    // }
-
-    // if (!order) {
-    //   return res.status(404).json({
-    //     success: false,
-    //     message: "Order not found"
-    //   });
-    // }
-
-    // // Get customer details
-    // const customer = await User.findById(order.user);
-    // if (!customer) {
-    //   return res.status(404).json({
-    //     success: false,
-    //     message: "Customer not found for this order"
-    //   });
-    // }
-
-    // Use provided phone number or customer's phone
-    // const recipientPhone = phoneNumber || customer.phone;
-    // if (!recipientPhone) {
-    //   return res.status(400).json({
-    //     success: false,
-    //     message: "Phone number is required. Please provide phoneNumber in request or ensure customer has a phone number."
-    //   });
-    // }
-
-    // // Find invoice for this order
-    // const Invoice = require('../models/invoice_model');
-    // const invoice = await Invoice.findOne({ orderId: order._id });
-    // const invoiceNumber = invoice ? invoice.invoiceNumber : 'N/A';
-
-    // Send WhatsApp message
-    const result = await sendWhatsAppMessage(
-      "+917092053592",
-      "PGCOM-1764065481098-94200",
-      "1764065481098-94200",
-      0
-    );
-
-    if (result.success) {
-      return res.status(200).json({
-        success: true,
-        message: "WhatsApp message sent successfully",
-        // data: {
-        //   orderCode: order.orderCode,
-        //   invoiceNumber: invoiceNumber,
-        //   phoneNumber: recipientPhone,
-        //   messageSid: result.messageSid
-        // }
-      });
+    if (!formattedPhone.startsWith("+")) {
+      formattedPhone = formattedPhone.replace(/^0+/, "").replace(/^91/, "");
+      formattedPhone = `whatsapp:+91${formattedPhone}`;
     } else {
-      return res.status(500).json({
-        success: false,
-        message: "Failed to send WhatsApp message",
-        error: result.error
-      });
+      formattedPhone = `whatsapp:${formattedPhone}`;
     }
+
+    console.log(`📱 Sending WhatsApp message to: ${formattedPhone}`);
+
+    const message = await twilioClient.messages.create({
+      from: "whatsapp:+918248419009",
+      to: formattedPhone,
+      contentSid: "HXea79ea3fb953907d6fcd2280bf605270", // APPROVED template
+      contentVariables: JSON.stringify({
+        "1": firstName,
+        "2": invoiceNumber
+      })
+    });
+
+    console.log(`✅ WhatsApp message sent. SID: ${message.sid}`);
+    return { success: true, messageSid: message.sid };
+
   } catch (error) {
-    console.error('❌ Error in sendOrderWhatsAppMessage:', error);
-    return res.status(500).json({
-      success: false,
-      message: "Error sending WhatsApp message",
-      error: error.message
+    console.error("❌ Twilio error:", error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+const sendOrderWhatsAppMessage = async (req, res) => {
+  const result = await sendWhatsAppMessage3242(
+    "+917092053592",
+    "Rajkumar",
+    "INV987796"
+  );
+
+  if (result.success) {
+    return res.status(200).json({
+      success: true,
+      messageSid: result.messageSid
     });
   }
+
+  return res.status(500).json({
+    success: false,
+    error: result.error
+  });
 };
+
 
 module.exports = {
   placeOrder, returnOrder, refundOrder, createReturnRefundRequest, getOrderHistory, generateTokenPhonePe, createOrderPhonePe, checkPhonePeOrderStatus,
@@ -3062,5 +3242,5 @@ module.exports = {
   getInvestmentOrdersByMonth,
   getTotalRevenue,
   getTotalInvestmentOrders,
-  sendOrderWhatsAppMessage
+  sendOrderWhatsAppMessage,sendWhatsAppMessageApi
 };

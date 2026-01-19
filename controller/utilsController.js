@@ -28,8 +28,11 @@ const getInvestmentSettings = asyncHandler(async (req, res) => {
       goldPrice22kt: settings.goldRate22kt || null,
       goldPrice18kt: settings.goldRate18kt || null,
       goldStatus: settings.goldStatus ?? "inactive",
-      silverPrice: settings.silverRate ?? null, 
+      silverPrice: settings.silverRate ?? null,
+      silverPrice925: settings.silverRate925 || (settings.silverRate ? parseFloat((settings.silverRate * 0.925).toFixed(2)) : null),
       silverStatus: settings.silverStatus ?? "inactive",
+      goldPremiumPercentage: settings.goldPremiumPercentage ?? 9.5,
+      silverPremiumPercentage: settings.silverPremiumPercentage ?? 9.5,
       updatedAt: settings.updatedAt,
     };
 
@@ -65,8 +68,11 @@ const createInvestmentSettings = asyncHandler(async (req, res) => {
       goldRate18kt, 
       goldStatus, 
       silverRate, 
+      silverRate925,
       silverStatus, 
-      makingChargesPercentage 
+      makingChargesPercentage,
+      goldPremiumPercentage,
+      silverPremiumPercentage
     } = req.body;
     
     console.log("Parsed Input:", { 
@@ -108,9 +114,17 @@ const createInvestmentSettings = asyncHandler(async (req, res) => {
       settings.goldRate18kt = goldRate18kt || 0;
       settings.goldStatus = goldStatus ?? settings.goldStatus;
       settings.silverRate = silverRate;
+      // Auto-calculate 92.5% silver if not provided
+      settings.silverRate925 = silverRate925 || parseFloat((silverRate * 0.925).toFixed(2));
       settings.silverStatus = silverStatus ?? settings.silverStatus;
       if (makingChargesPercentage) {
         settings.makingChargesPercentage = makingChargesPercentage;
+      }
+      if (goldPremiumPercentage != null && !isNaN(goldPremiumPercentage)) {
+        settings.goldPremiumPercentage = parseFloat(goldPremiumPercentage);
+      }
+      if (silverPremiumPercentage != null && !isNaN(silverPremiumPercentage)) {
+        settings.silverPremiumPercentage = parseFloat(silverPremiumPercentage);
       }
       await settings.save();
     } else {
@@ -121,8 +135,11 @@ const createInvestmentSettings = asyncHandler(async (req, res) => {
         goldRate18kt: goldRate18kt || 0,
         goldStatus: goldStatus ?? true,
         silverRate: silverRate,
+        silverRate925: silverRate925 || parseFloat((silverRate * 0.925).toFixed(2)), // Auto-calculate if not provided
         silverStatus: silverStatus ?? false,
-        makingChargesPercentage: makingChargesPercentage || 15
+        makingChargesPercentage: makingChargesPercentage || 15,
+        goldPremiumPercentage: goldPremiumPercentage != null && !isNaN(goldPremiumPercentage) ? parseFloat(goldPremiumPercentage) : 9.5,
+        silverPremiumPercentage: silverPremiumPercentage != null && !isNaN(silverPremiumPercentage) ? parseFloat(silverPremiumPercentage) : 9.5
       });
     }
 
@@ -188,10 +205,73 @@ console.log("sendMailotp", toEmail, toName);
 
     const otp = generateOTP();
     const htmlContent = `
-      <h2>Your OTP Code</h2>
-      <p>Dear ${toName || 'User'},</p>
-      <p>Your OTP is: <strong>${otp}</strong></p>
-      <p>This code will expire in 10 minutes.</p>
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <style>
+          @media only screen and (max-width: 600px) {
+            .email-container {
+              width: 100% !important;
+              max-width: 100% !important;
+              padding: 15px !important;
+            }
+            .email-content {
+              padding: 20px 15px !important;
+            }
+            .otp-box {
+              padding: 20px 15px !important;
+            }
+            .otp-code {
+              font-size: 32px !important;
+              letter-spacing: 6px !important;
+              padding: 15px 20px !important;
+            }
+            .email-title {
+              font-size: 20px !important;
+            }
+            .email-text {
+              font-size: 14px !important;
+            }
+          }
+        </style>
+      </head>
+      <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+        <table role="presentation" style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td align="center" style="padding: 20px 10px;">
+              <table role="presentation" class="email-container" style="width: 100%; max-width: 500px; border-collapse: collapse; background-color: #ffffff; border-radius: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);">
+                <tr>
+                  <td class="email-content" style="padding: 30px; text-align: center;">
+                    <h2 class="email-title" style="margin: 0 0 20px; color: #333; font-size: 24px;">Your OTP Code</h2>
+                    <p class="email-text" style="margin: 0 0 15px; color: #555; font-size: 16px;">Dear ${toName || 'User'},</p>
+                    <div class="otp-box" style="background: linear-gradient(135deg, #f9f4ef 0%, #fff8f0 100%); border: 2px solid #D4AF37; border-radius: 10px; padding: 25px; margin: 20px 0; display: inline-block;">
+                      <p style="margin: 0 0 10px; color: #666; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Verification Code</p>
+                      <div class="otp-code" style="font-size: 36px; font-weight: bold; color: #333; letter-spacing: 8px; font-family: 'Courier New', monospace; background: #D4AF37; padding: 15px 25px; border-radius: 8px; margin: 10px 0;">
+                        ${otp}
+                      </div>
+                      <p style="margin: 15px 0 0; color: #999; font-size: 12px;">This code expires in <strong style="color: #d4a574;">10 minutes</strong></p>
+                    </div>
+                    <p class="email-text" style="margin: 20px 0 0; color: #888; font-size: 13px; line-height: 1.6;">
+                      If you did not request this code, please ignore this email.
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 20px; text-align: center; background: #fafafa; border-top: 1px solid #eee;">
+                    <p style="margin: 0; color: #aaa; font-size: 11px;">
+                      © ${new Date().getFullYear()} Precious Goldsmith. All rights reserved.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
     `;
 
   
@@ -428,6 +508,7 @@ const getInvestmentOption = asyncHandler(async (req, res) => {
         status: true,
         data: {
           investmentEnabled: true, // Default to enabled if no settings exist
+          appointmentEnabled: true, // Default to enabled if no settings exist
         },
       });
     }
@@ -436,6 +517,7 @@ const getInvestmentOption = asyncHandler(async (req, res) => {
       status: true,
       data: {
         investmentEnabled: settings.investmentEnabled ?? true,
+        appointmentEnabled: settings.appointmentEnabled ?? true,
       },
     });
   } catch (error) {
@@ -479,6 +561,7 @@ const updateInvestmentOption = asyncHandler(async (req, res) => {
       // Create new settings with default values
       settings = await InvestmentSettings.create({
         investmentEnabled: investmentEnabled,
+        appointmentEnabled: true,
         goldRate: 0,
         goldRate24kt: 0,
         goldRate22kt: 0,
@@ -506,6 +589,97 @@ const updateInvestmentOption = asyncHandler(async (req, res) => {
   }
 });
 
+// ✅ GET Appointment Option Status
+const getAppointmentOption = asyncHandler(async (req, res) => {
+  console.log("Fetching Appointment Option Status...");
+
+  try {
+    const settings = await InvestmentSettings.findOne().sort({ updatedAt: -1 });
+
+    if (!settings) {
+      return res.status(200).json({
+        status: true,
+        data: {
+          appointmentEnabled: true, // Default to enabled if no settings exist
+        },
+      });
+    }
+
+    return res.status(200).json({
+      status: true,
+      data: {
+        appointmentEnabled: settings.appointmentEnabled ?? true,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching appointment option:", error);
+    return res.status(500).json({
+      status: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+});
+
+// ✅ UPDATE Appointment Option Status
+const updateAppointmentOption = asyncHandler(async (req, res) => {
+  console.log("Updating Appointment Option:", req.body);
+  
+  const requestingAdmin = await adminModel.findById(req.admin.id);
+  if (!requestingAdmin) {
+    return res.status(403).json({
+      status: false,
+      message: 'Not authorized. Only super admins can update appointment option.'
+    });
+  }
+
+  try {
+    const { appointmentEnabled } = req.body;
+
+    if (typeof appointmentEnabled !== 'boolean') {
+      return res.status(400).json({
+        status: false,
+        message: "appointmentEnabled must be a boolean value",
+      });
+    }
+
+    let settings = await InvestmentSettings.findOne();
+    if (settings) {
+      settings.appointmentEnabled = appointmentEnabled;
+      settings.updatedAt = new Date();
+      await settings.save();
+    } else {
+      // Create new settings with default values
+      settings = await InvestmentSettings.create({
+        investmentEnabled: true,
+        appointmentEnabled: appointmentEnabled,
+        goldRate: 0,
+        goldRate24kt: 0,
+        goldRate22kt: 0,
+        goldRate18kt: 0,
+        silverRate: 0,
+        goldStatus: true,
+        silverStatus: false,
+        makingChargesPercentage: 15,
+      });
+    }
+
+    return res.status(200).json({
+      status: true,
+      message: `Appointment option ${appointmentEnabled ? 'enabled' : 'disabled'} successfully`,
+      data: {
+        appointmentEnabled: settings.appointmentEnabled,
+      },
+    });
+  } catch (error) {
+    console.error("Error updating appointment option:", error);
+    return res.status(500).json({
+      status: false,
+      message: error.message,
+    });
+  }
+});
+
 module.exports={
   getInvestmentSettings,
   sendMailotp,
@@ -516,5 +690,7 @@ module.exports={
   updateSingleProductPrice,
   getProductPriceBreakdown,
   getInvestmentOption,
-  updateInvestmentOption
+  updateInvestmentOption,
+  getAppointmentOption,
+  updateAppointmentOption
 }

@@ -5,6 +5,10 @@ const investmentSchema = new mongoose.Schema({
         type: Boolean,
         default: true
     }, // Master toggle for investment features
+    appointmentEnabled: {
+        type: Boolean,
+        default: true
+    }, // Master toggle for appointment booking feature
     goldRate: {
         type: Number,
         default: 0
@@ -24,7 +28,11 @@ const investmentSchema = new mongoose.Schema({
     silverRate: {
         type: Number,
         default: 0
-    }, 
+    }, // Pure silver (100%)
+    silverRate925: {
+        type: Number,
+        default: 0
+    }, // Sterling silver (92.5%) 
     goldStatus: {
         type: Boolean,
         default: true
@@ -39,6 +47,18 @@ const investmentSchema = new mongoose.Schema({
         min: 0,
         max: 100
     },
+    goldPremiumPercentage: {
+        type: Number,
+        default: 9.5,
+        min: 0,
+        max: 100
+    }, // Premium percentage added to fetched gold price
+    silverPremiumPercentage: {
+        type: Number,
+        default: 9.5,
+        min: 0,
+        max: 100
+    }, // Premium percentage added to fetched silver price
     updatedAt: {
         type: Date,
         default: Date.now

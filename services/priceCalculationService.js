@@ -332,7 +332,10 @@ function calculateProductPrice(product, goldPrice, silverPrice) {
   let stoneName = "";
   let othersName = "";
 
-  // 1️⃣ Calculate Gold & Silver values (optional)
+  // Array to preserve all non-metal items (diamonds, stones, other items)
+  const preservedItems = [];
+
+  // 1️⃣ Calculate Gold & Silver values (optional) and preserve other items
   priceDetails.forEach((item) => {
     const name = item.name?.toLowerCase();
 
@@ -344,29 +347,60 @@ function calculateProductPrice(product, goldPrice, silverPrice) {
       goldWeight = weight;
       goldValue = goldPrice * weight; // ✅ weight × rate (no purity)
       totalWeight += weight;
-    }
-
-    if (name?.includes('silver')) {
+    } else if (name?.includes('silver')) {
       console.log(`Calculating Silver: ${item.weight}g`);
       const weight = parseFloat(item.weight) ;
       silverWeight = weight;
       silverValue = silverPrice * weight; // ✅ weight × rate
       totalWeight += weight;
-    }
-
-    if (name?.includes('stone')) {
-      console.log(`Calculating Stone: ${item.weight}g`);
-            stoneWeight = parseFloat(item.weight);
-
-      stoneValue = parseFloat(item.value) ;
+    } else if (name?.includes('stone') || name?.includes('diamond') || name?.includes('ruby') || 
+               name?.includes('emerald') || name?.includes('sapphire') || name?.includes('pearl')) {
+      // Preserve stone/diamond/gem items
+      console.log(`Preserving Stone/Diamond: ${item.name}, weight: ${item.weight}, value: ${item.value}`);
+      const weight = parseFloat(item.weight) || 0;
+      const value = parseFloat(item.value) || 0;
+      stoneWeight += weight;
+      stoneValue += value;
+      // Keep the first stone name or use a generic name if multiple
+      if (!stoneName) {
       stoneName = item.name;
     }
-
-    if (name?.includes('other')) {
-      console.log(`Calculating Other: ${item.weight}g`);
-      othersWeight = parseFloat(item.weight);
-      otherValue = parseFloat(item.value) ;
+      // Also preserve the item for the breakdown
+      preservedItems.push({
+        name: item.name,
+        weight: item.weight || `${weight.toFixed(3)}g`,
+        value: value
+      });
+    } else if (name?.includes('other')) {
+      console.log(`Preserving Other: ${item.name}, weight: ${item.weight}, value: ${item.value}`);
+      const weight = parseFloat(item.weight) || 0;
+      const value = parseFloat(item.value) || 0;
+      othersWeight += weight;
+      otherValue += value;
+      if (!othersName) {
       othersName = item.name;
+      }
+      // Also preserve the item for the breakdown
+      preservedItems.push({
+        name: item.name,
+        weight: item.weight || `${weight.toFixed(3)}g`,
+        value: value
+      });
+    } else if (!name?.includes('making') && !name?.includes('discount') && 
+               !name?.includes('gst') && !name?.includes('subtotal') && 
+               !name?.includes('total') && !name?.includes('grand') && 
+               !name?.includes('final') && !name?.includes('roundoff') && 
+               !name?.includes('round off') && !name?.includes('round-off')) {
+      // Preserve any other custom items that are not system items
+      // Exclude roundoff entries - we only want one at the end
+      console.log(`Preserving custom item: ${item.name}, weight: ${item.weight}, value: ${item.value}`);
+      preservedItems.push({
+        name: item.name,
+        weight: item.weight || '',
+        value: parseFloat(item.value) || 0
+      });
+      // Add to otherValue for making charges calculation
+      otherValue += parseFloat(item.value) || 0;
     }
   });
 
@@ -413,11 +447,21 @@ console.log(`Subtotal (before discount): ${subtotal}`);
   const gstRate = parseFloat(product.gst) || 0;
   gstValue = (subtotalAfterDiscount * gstRate) / 100;
 
+  // Format GST rate to display exactly as stored (avoid recalculation from rounded value)
+  // Remove trailing zeros for whole numbers, but keep 2 decimal places for decimals
+  const displayGstRate = gstRate % 1 === 0 ? gstRate.toString() : gstRate.toFixed(2);
 
-  console.log(`GST (${gstRate}%): ${gstValue}`);
+  console.log(`GST (${displayGstRate}%): ${gstValue}`);
   // 6️⃣ Final Grand Total
-  const grandTotal = subtotalAfterDiscount + gstValue;
-  console.log(`Grand Total: ${grandTotal}`);
+  const grandTotalBeforeRoundoff = subtotalAfterDiscount + gstValue;
+  // Round up the Grand Total to the nearest whole number
+  const grandTotal = Math.ceil(grandTotalBeforeRoundoff);
+  const roundOff = grandTotal - grandTotalBeforeRoundoff;
+  console.log(`Grand Total (before roundoff): ${grandTotalBeforeRoundoff}`);
+  console.log(`Grand Total (after roundoff): ${grandTotal}`);
+  if (roundOff > 0) {
+    console.log(`Roundoff: ${roundOff}`);
+  }
 
   // 7️⃣ Build formatted breakdown (invoice-style)
   const breakdown = [];
@@ -426,19 +470,28 @@ console.log(`Subtotal (before discount): ${subtotal}`);
     breakdown.push({ name: 'Gold', weight: `${(goldWeight).toFixed(3)}g`, value: +goldValue.toFixed(2) });
   if (silverValue > 0)
     breakdown.push({ name: 'Silver', weight: `${(silverWeight).toFixed(3)}g`, value: +silverValue.toFixed(2) });
-  if (stoneValue > 0)
-    breakdown.push({ name: stoneName, weight: `${(stoneWeight).toFixed(3)}g`, value: +stoneValue.toFixed(2) });
-  if (otherValue > 0)
-    breakdown.push({ name: othersName, weight: `${(othersWeight).toFixed(3)}g`, value: +otherValue.toFixed(2) });
+  
+  // Add all preserved items (diamonds, stones, other custom items)
+  preservedItems.forEach(item => {
+    breakdown.push({
+      name: item.name,
+      weight: item.weight || '',
+      value: +parseFloat(item.value).toFixed(2)
+    });
+  });
 
   breakdown.push({ name: 'Making Charges', weight: makingchargesvalue, value: +makingCharges.toFixed(2) });
   breakdown.push({ name: 'Sub Total', weight: `${totalWeight.toFixed(3)}g Gross Wt.`, value: +subtotal.toFixed(2) });
   breakdown.push({ name: 'Discount', weight: discountValue ? `${((discountValue / subtotal) * 100).toFixed(2)}%` : '0%', value: +discountValue.toFixed(2) });
   breakdown.push({ name: 'Subtotal after Discount', weight: 'After discount', value: +subtotalAfterDiscount.toFixed(2) });
-  breakdown.push({ name: 'GST', weight: `${gstRate}%`, value: +gstValue.toFixed(2) });
+  breakdown.push({ name: 'GST', weight: `${displayGstRate}%`, value: +gstValue.toFixed(2) });
+  // Add roundoff if it exists
+  if (roundOff > 0) {
+    breakdown.push({ name: 'Roundoff', weight: 'Rounding', value: +roundOff.toFixed(2) });
+  }
   breakdown.push({ name: 'Grand Total', weight: 'Final Price', value: +grandTotal.toFixed(2) });
 
-    const sellingprice = (+grandTotal.toFixed(2));
+    const sellingprice = grandTotal;
   console.log('Price Breakdown:', breakdown, 'Final Selling Price:', sellingprice);
 
   return {
