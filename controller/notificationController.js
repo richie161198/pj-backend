@@ -35,6 +35,19 @@ const createNotification = async (req, res) => {
       metadata
     } = req.body;
 
+    // Determine status based on scheduledAt
+    let status = 'draft';
+    if (scheduledAt) {
+      const scheduledDate = new Date(scheduledAt);
+      const now = new Date();
+      if (scheduledDate > now) {
+        status = 'scheduled';
+      } else {
+        // If scheduled time is in the past, set as draft (can be sent immediately)
+        status = 'draft';
+      }
+    }
+
     // Create notification
     const notification = new Notification({
       title,
@@ -49,6 +62,7 @@ const createNotification = async (req, res) => {
       actionType,
       screenName,
       scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+      status,
       createdBy: req.admin.id,
       metadata
     });
@@ -191,7 +205,24 @@ const updateNotification = async (req, res) => {
     }
 
     const { id } = req.params;
-    const updateData = req.body;
+    const updateData = { ...req.body };
+
+    // Convert scheduledAt to Date object if provided
+    if (updateData.scheduledAt) {
+      updateData.scheduledAt = new Date(updateData.scheduledAt);
+      
+      // Update status based on scheduledAt
+      const scheduledDate = new Date(updateData.scheduledAt);
+      const now = new Date();
+      if (scheduledDate > now) {
+        updateData.status = 'scheduled';
+      } else {
+        // If scheduled time is in the past, keep current status or set as draft
+        if (!updateData.status) {
+          updateData.status = 'draft';
+        }
+      }
+    }
 
     // Don't allow updating sent notifications
     const existingNotification = await Notification.findById(id);

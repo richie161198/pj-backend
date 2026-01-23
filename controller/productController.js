@@ -748,7 +748,8 @@ const updateCategory = expressAsyncHandler(async (req, res) => {
 // Get All Categories
 const getAllCategories = expressAsyncHandler(async (req, res) => {
   try {
-    const categories = await Category.find({});
+    // Fetch all categories without any limit - return all categories
+    const categories = await Category.find({}).sort({ name: 1 }); // Sort alphabetically by name
     res.status(200).json({ status: true, count: categories.length, categories });
   } catch (error) {
     res.status(500).json({ status: false, message: error.message });

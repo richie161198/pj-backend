@@ -6,7 +6,6 @@ const cloudinary = require('cloudinary').v2;
 const createBanner = async (req, res) => {
   try {
     const {
-      title,
       description,
       link,
       linkText,
@@ -25,8 +24,37 @@ const createBanner = async (req, res) => {
       imageBytes
     } = req.body;
 
-    // Title is optional - generate a default if missing
-    const resolvedTitle = title && title.trim() ? title.trim() : `Banner ${new Date().toISOString()}`;
+    // Validate required fields
+    if (!category) {
+      return res.status(400).json({
+        success: false,
+        message: 'Category is required'
+      });
+    }
+
+    if (position === undefined || position === null) {
+      return res.status(400).json({
+        success: false,
+        message: 'Position is required'
+      });
+    }
+
+    // Check if position is already taken for this category
+    const existingBanner = await Banner.findOne({
+      category: category,
+      position: Number(position),
+      isActive: true
+    });
+
+    if (existingBanner) {
+      return res.status(400).json({
+        success: false,
+        message: `Position ${position} is already set for category "${category}". Please change the position.`
+      });
+    }
+
+    // Generate a default title
+    const resolvedTitle = `Banner ${new Date().toISOString()}`;
 
     let imageResult = null;
 

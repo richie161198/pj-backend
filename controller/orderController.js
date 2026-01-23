@@ -31,7 +31,7 @@ const twilioClient = twilio(
 // WhatsApp Content Template SID
 // const WHATSAPP_TEMPLATE_SID = "HXf4af99bd1ba1e9a90b4b5fb2a872d441";
 // const WHATSAPP_TEMPLATE_SID = "HXea79ea3fb953907d6fcd2280bf605270";
-const WHATSAPP_TEMPLATE_SID = process.env.WHATSAPP_TEMPLATE_SID
+const WHATSAPP_TEMPLATE_SID = process.env.WHATSAPP_TEMPLATE_SID;
 
 // Helper function to send WhatsApp message using Content Template
 async function sendWhatsAppMessage(phoneNumber, orderCode, invoiceNumber, totalAmount) {
@@ -1680,7 +1680,9 @@ const createReturnRefundRequest = async (req, res) => {
       validItems.push({
         productId: productIdForRequest,
         qty: item.qty,
-        reason: item.reason || reason || 'Not specified'
+        reason: item.reason || reason || 'Not specified',
+        note: item.note || null, // Additional note when reason is "Other"
+        mediaUrls: item.mediaUrls || [] // Array of image/video URLs
       });
 
       // Calculate refund amount for this item

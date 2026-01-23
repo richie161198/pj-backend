@@ -20,6 +20,7 @@ const { generateOTP } = require("./helpers/helpers");
 const { v4: uuidv4 } = require("uuid");
 const fs = require("fs");
 const { startGoldPriceScheduler } = require("./controller/goldPriceController");
+const { startNotificationScheduler } = require("./services/notificationScheduler");
 
 const logoBase64 = fs.readFileSync("public/logo/23.png").toString("base64");
 
@@ -54,7 +55,41 @@ const io = socket(server);
 app.use(morgan("dev"));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(cors());
+
+// CORS configuration
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    // List of allowed origins
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'http://localhost:5174',
+      'https://www.preciousgoldsmith.net',
+      'https://preciousgoldsmith.net',
+      'https://admin.preciousgoldsmith.net',
+      'http://admin.preciousgoldsmith.net'
+    ];
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all origins for now - you can restrict this in production
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 86400, // 24 hours
+};
+
+app.use(cors(corsOptions));
+
+// Handle preflight OPTIONS requests explicitly
+// app.options('*', cors(corsOptions));
 
 app.get("/", (req, res) => {
   console.log("started");
@@ -450,6 +485,7 @@ app.use("/api/v0/users", require("./routers/userRouter"));
 app.use("/api/v0/utils", require("./routers/utilsRouter"));
 app.use("/api/v0/order", require("./routers/orderRouter"));
 app.use("/api/v0/commerce", require("./routers/productRouter"));
+app.use("/api/v0/reviews", require("./routers/reviewRouter"));
 app.use("/api/v0/images", require("./routers/imageRouter"));
 app.use("/api/v0/chat", require("./routers/chatRouter"));
 app.use("/api/v0/notifications", require("./routers/notificationRouter"));
@@ -1904,8 +1940,9 @@ app.get('/api/phonepe/check-status/:orderId', async (req, res) => {
 });
 
 
-server.listen(process.env.PORT, () => {
-  console.log(`Server on ${process.env.PORT} `);
-  // Start daily gold price sync (fetch once every 24h)
+const PORT = process.env.PORT || 4000;
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on http://0.0.0.0:${PORT}`);
   startGoldPriceScheduler();
+  startNotificationScheduler();
 });
