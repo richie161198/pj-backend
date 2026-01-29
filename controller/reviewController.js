@@ -4,6 +4,33 @@ const Product = require("../models/product_model");
 const User = require("../models/userModel");
 
 /**
+ * Helper function to recalculate product rating based on approved reviews only
+ */
+const recalculateProductRating = async (productId) => {
+  const approvedReviews = await Review.find({ productId, status: "approved" });
+  
+  if (approvedReviews.length === 0) {
+    await Product.findByIdAndUpdate(productId, {
+      "rating.value": 0,
+      "rating.count": 0,
+    });
+    return { value: 0, count: 0 };
+  }
+  
+  const totalRating = approvedReviews.reduce((sum, r) => sum + r.rating, 0);
+  const averageRating = totalRating / approvedReviews.length;
+  const reviewCount = approvedReviews.length;
+  
+  const rating = {
+    value: Math.round(averageRating * 10) / 10,
+    count: reviewCount,
+  };
+  
+  await Product.findByIdAndUpdate(productId, { rating });
+  return rating;
+};
+
+/**
  * Add a review for a product
  */
 const addReview = expressAsyncHandler(async (req, res) => {
@@ -54,7 +81,7 @@ const addReview = expressAsyncHandler(async (req, res) => {
       });
     }
 
-    // Create review
+    // Create review with pending status
     const review = new Review({
       userId,
       productId,
@@ -63,31 +90,20 @@ const addReview = expressAsyncHandler(async (req, res) => {
       rating: parseInt(rating),
       title: title || "",
       body,
+      status: "pending", // New reviews require admin approval
     });
 
     await review.save();
 
-    // Update product rating
-    const allReviews = await Review.find({ productId });
-    const totalRating = allReviews.reduce((sum, r) => sum + r.rating, 0);
-    const averageRating = totalRating / allReviews.length;
-    const reviewCount = allReviews.length;
-
-    product.rating = {
-      value: Math.round(averageRating * 10) / 10, // Round to 1 decimal place
-      count: reviewCount,
-    };
-
-    await product.save();
-
+    // Note: Product rating is NOT updated here - only when review is approved
     // Populate user details for response
     await review.populate("userId", "name email profilePhoto");
 
     res.status(201).json({
       status: true,
-      message: "Review added successfully",
+      message: "Review submitted successfully! It will be visible once approved by admin.",
       review,
-      updatedProductRating: product.rating,
+      pendingApproval: true,
     });
   } catch (error) {
     console.error("Add review error:", error);
@@ -100,7 +116,7 @@ const addReview = expressAsyncHandler(async (req, res) => {
 });
 
 /**
- * Get all reviews for a product
+ * Get all approved reviews for a product (for app/public)
  */
 const getProductReviews = expressAsyncHandler(async (req, res) => {
   try {
@@ -119,13 +135,14 @@ const getProductReviews = expressAsyncHandler(async (req, res) => {
       sortObj = { rating: 1 };
     }
 
-    const reviews = await Review.find({ productId })
+    // Only return approved reviews for public/app
+    const reviews = await Review.find({ productId, status: "approved" })
       .populate("userId", "name email profilePhoto")
       .sort(sortObj)
       .skip(skip)
       .limit(parseInt(limit));
 
-    const total = await Review.countDocuments({ productId });
+    const total = await Review.countDocuments({ productId, status: "approved" });
 
     res.status(200).json({
       status: true,
@@ -148,11 +165,11 @@ const getProductReviews = expressAsyncHandler(async (req, res) => {
 });
 
 /**
- * Get all reviews (Admin)
+ * Get all reviews (Admin) with status filter
  */
 const getAllReviews = expressAsyncHandler(async (req, res) => {
   try {
-    const { page = 1, limit = 20, productId, userId, rating } = req.query;
+    const { page = 1, limit = 20, productId, userId, rating, status } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     // Build filter
@@ -160,19 +177,31 @@ const getAllReviews = expressAsyncHandler(async (req, res) => {
     if (productId) filter.productId = productId;
     if (userId) filter.userId = userId;
     if (rating) filter.rating = parseInt(rating);
+    if (status) filter.status = status;
 
     const reviews = await Review.find(filter)
-      .populate("userId", "name email profilePhoto")
-      .populate("productId", "name images")
+      .populate("userId", "name email profilePhoto phone")
+      .populate("productId", "name images skuId")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
     const total = await Review.countDocuments(filter);
+    
+    // Get counts by status
+    const pendingCount = await Review.countDocuments({ ...filter, status: "pending" });
+    const approvedCount = await Review.countDocuments({ ...filter, status: "approved" });
+    const rejectedCount = await Review.countDocuments({ ...filter, status: "rejected" });
 
     res.status(200).json({
       status: true,
       reviews,
+      counts: {
+        pending: pendingCount,
+        approved: approvedCount,
+        rejected: rejectedCount,
+        total,
+      },
       pagination: {
         currentPage: parseInt(page),
         totalPages: Math.ceil(total / parseInt(limit)),
@@ -185,6 +214,113 @@ const getAllReviews = expressAsyncHandler(async (req, res) => {
     res.status(500).json({
       status: false,
       message: "Error fetching reviews",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * Approve a review (Admin only)
+ */
+const approveReview = expressAsyncHandler(async (req, res) => {
+  try {
+    const { reviewId } = req.params;
+    const adminId = req.user.id;
+
+    const review = await Review.findById(reviewId);
+    if (!review) {
+      return res.status(404).json({
+        status: false,
+        message: "Review not found",
+      });
+    }
+
+    if (review.status === "approved") {
+      return res.status(400).json({
+        status: false,
+        message: "Review is already approved",
+      });
+    }
+
+    // Update review status
+    review.status = "approved";
+    review.reviewedBy = adminId;
+    review.reviewedAt = new Date();
+    await review.save();
+
+    // Recalculate product rating with the newly approved review
+    const updatedRating = await recalculateProductRating(review.productId);
+
+    await review.populate("userId", "name email profilePhoto");
+    await review.populate("productId", "name images");
+
+    res.status(200).json({
+      status: true,
+      message: "Review approved successfully",
+      review,
+      updatedProductRating: updatedRating,
+    });
+  } catch (error) {
+    console.error("Approve review error:", error);
+    res.status(500).json({
+      status: false,
+      message: "Error approving review",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * Reject a review (Admin only)
+ */
+const rejectReview = expressAsyncHandler(async (req, res) => {
+  try {
+    const { reviewId } = req.params;
+    const { reason } = req.body;
+    const adminId = req.user.id;
+
+    const review = await Review.findById(reviewId);
+    if (!review) {
+      return res.status(404).json({
+        status: false,
+        message: "Review not found",
+      });
+    }
+
+    if (review.status === "rejected") {
+      return res.status(400).json({
+        status: false,
+        message: "Review is already rejected",
+      });
+    }
+
+    const wasApproved = review.status === "approved";
+
+    // Update review status
+    review.status = "rejected";
+    review.rejectionReason = reason || "";
+    review.reviewedBy = adminId;
+    review.reviewedAt = new Date();
+    await review.save();
+
+    // If was previously approved, recalculate product rating
+    if (wasApproved) {
+      await recalculateProductRating(review.productId);
+    }
+
+    await review.populate("userId", "name email profilePhoto");
+    await review.populate("productId", "name images");
+
+    res.status(200).json({
+      status: true,
+      message: "Review rejected successfully",
+      review,
+    });
+  } catch (error) {
+    console.error("Reject review error:", error);
+    res.status(500).json({
+      status: false,
+      message: "Error rejecting review",
       error: error.message,
     });
   }
@@ -216,28 +352,14 @@ const deleteReview = expressAsyncHandler(async (req, res) => {
     }
 
     const productId = review.productId;
+    const wasApproved = review.status === "approved";
 
     // Delete review
     await Review.findByIdAndDelete(reviewId);
 
-    // Update product rating
-    const allReviews = await Review.find({ productId });
-    
-    if (allReviews.length === 0) {
-      // No reviews left, reset rating
-      await Product.findByIdAndUpdate(productId, {
-        "rating.value": 0,
-        "rating.count": 0,
-      });
-    } else {
-      const totalRating = allReviews.reduce((sum, r) => sum + r.rating, 0);
-      const averageRating = totalRating / allReviews.length;
-      const reviewCount = allReviews.length;
-
-      await Product.findByIdAndUpdate(productId, {
-        "rating.value": Math.round(averageRating * 10) / 10,
-        "rating.count": reviewCount,
-      });
+    // Only recalculate product rating if the deleted review was approved
+    if (wasApproved) {
+      await recalculateProductRating(productId);
     }
 
     res.status(200).json({
@@ -255,7 +377,7 @@ const deleteReview = expressAsyncHandler(async (req, res) => {
 });
 
 /**
- * Update a review (User can update their own review)
+ * Update a review (User can update their own review - resets to pending status)
  */
 const updateReview = expressAsyncHandler(async (req, res) => {
   try {
@@ -279,6 +401,8 @@ const updateReview = expressAsyncHandler(async (req, res) => {
       });
     }
 
+    const wasApproved = review.status === "approved";
+
     // Update review
     if (rating !== undefined) {
       if (rating < 1 || rating > 5) {
@@ -291,25 +415,28 @@ const updateReview = expressAsyncHandler(async (req, res) => {
     }
     if (title !== undefined) review.title = title;
     if (body !== undefined) review.body = body;
+    
+    // Reset status to pending for re-approval
+    review.status = "pending";
+    review.reviewedBy = null;
+    review.reviewedAt = null;
+    review.rejectionReason = null;
     review.updatedAt = new Date();
 
     await review.save();
 
-    // Update product rating
-    const allReviews = await Review.find({ productId: review.productId });
-    const totalRating = allReviews.reduce((sum, r) => sum + r.rating, 0);
-    const averageRating = totalRating / allReviews.length;
-
-    await Product.findByIdAndUpdate(review.productId, {
-      "rating.value": Math.round(averageRating * 10) / 10,
-    });
+    // If was previously approved, recalculate product rating (remove this review from calculation)
+    if (wasApproved) {
+      await recalculateProductRating(review.productId);
+    }
 
     await review.populate("userId", "name email profilePhoto");
 
     res.status(200).json({
       status: true,
-      message: "Review updated successfully",
+      message: "Review updated successfully. It will be visible once approved by admin.",
       review,
+      pendingApproval: true,
     });
   } catch (error) {
     console.error("Update review error:", error);
@@ -327,5 +454,7 @@ module.exports = {
   getAllReviews,
   deleteReview,
   updateReview,
+  approveReview,
+  rejectReview,
 };
 

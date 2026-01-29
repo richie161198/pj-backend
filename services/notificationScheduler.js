@@ -6,9 +6,7 @@ const fcmService = require('./fcmService');
 let schedulerInterval = null;
 let isRunning = false;
 
-/**
- * Process and send a scheduled notification
- */
+
 const processScheduledNotification = async (notification) => {
   try {
     console.log(`Processing scheduled notification: ${notification._id} - ${notification.title}`);

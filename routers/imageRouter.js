@@ -2,7 +2,9 @@ const express = require("express");
 const router = express.Router();
 const {
   upload,
+  uploadVideo,
   uploadSingleImage,
+  uploadSingleVideo,
   uploadMultipleImages,
   deleteImage,
   getImageDetails,
@@ -29,6 +31,9 @@ const multerErrorHandler = (multerMiddleware) => {
 
 // Single image upload endpoint
 router.post("/upload", multerErrorHandler(upload.single("image")), uploadSingleImage, handleUploadError);
+
+// Single video upload endpoint
+router.post("/upload-video", multerErrorHandler(uploadVideo.single("video")), uploadSingleVideo, handleUploadError);
 
 // Multiple images upload endpoint
 router.post("/upload-multiple", multerErrorHandler(upload.array("images", 10)), uploadMultipleImages, handleUploadError);

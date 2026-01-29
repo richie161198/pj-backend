@@ -21,7 +21,12 @@ const createBanner = async (req, res) => {
       imageWidth,
       imageHeight,
       imageFormat,
-      imageBytes
+      imageBytes,
+      // Video fields
+      bannerType,
+      videoUrl,
+      videoPublicId,
+      videoThumbnail
     } = req.body;
 
     // Validate required fields
@@ -115,7 +120,12 @@ const createBanner = async (req, res) => {
       targetAudience: targetAudience || 'all',
       category,
       tags: tags ? tags.split(',').map(tag => tag.trim()) : [],
-      createdBy: req.admin._id
+      createdBy: req.admin._id,
+      // Video fields
+      bannerType: bannerType || 'image',
+      videoUrl: videoUrl || null,
+      videoPublicId: videoPublicId || null,
+      videoThumbnail: videoThumbnail || null
     };
 
     const banner = new Banner(bannerData);
@@ -252,7 +262,7 @@ const getActiveBanners = async (req, res) => {
 
     const banners = await Banner.find(query)
       .sort({ position: 1, createdAt: -1 })
-      .select('title description imageUrl link linkText category tags');
+      .select('title description imageUrl link linkText category tags bannerType videoUrl videoThumbnail');
 
     res.status(200).json({
       success: true,
@@ -297,7 +307,7 @@ const getBannersByCategory = async (req, res) => {
 
     const banners = await Banner.find(query)
       .sort({ position: 1, createdAt: -1 })
-      .select('title description imageUrl link linkText category');
+      .select('title description imageUrl link linkText category bannerType videoUrl videoThumbnail');
 
     return res.status(200).json({ success: true, data: banners });
   } catch (error) {

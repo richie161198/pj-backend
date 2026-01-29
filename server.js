@@ -97,88 +97,8 @@ app.get("/", (req, res) => {
   console.log("api is working properly");
 });
 
-// Test banner endpoint
-app.get("/test-banner", async (req, res) => {
-  try {
-    const Banner = require('./models/banner_model');
-    
-    // Test banner creation
-    const testBanner = new Banner({
-      title: 'Test Banner',
-      description: 'This is a test banner',
-      imageUrl: 'https://example.com/test-image.jpg',
-      publicId: 'test-public-id',
-      imageWidth: 1200,
-      imageHeight: 600,
-      imageFormat: 'jpg',
-      imageBytes: 50000,
-      position: 1,
-      isActive: true,
-      targetAudience: 'all',
-      createdBy: new require('mongoose').Types.ObjectId()
-    });
-
-    const savedBanner = await testBanner.save();
-    console.log('Test banner created successfully:', savedBanner);
-
-    res.json({
-      success: true,
-      message: 'Banner test successful',
-      data: savedBanner
-    });
-
-  } catch (error) {
-    console.error('Error testing banner:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Banner test failed',
-      error: error.message
-    });
-  }
-});
-
-
-// app.use("/api/v1", apiRoutes);
-
 // app.use(notFound);
-// app.use(errorHandler);
-
-// app.post("/create-order", async (req, res) => {
-//   console.log("sddsds");
-//   try {
-//     var request = {
-//       order_amount: 100,
-//       order_currency: "INR",
-//       order_id: "order_34708045",
-//       customer_details: {
-//         customer_id: "walterwNdrcMi",
-//         customer_phone: "9999999999",
-//       },
-//       order_meta: {
-//         return_url:
-//           "https://www.cashfree.com/devstudio/preview/pg/web/checkout?order_id={order_id}",
-//       },
-//     };
-//     cashfree
-//       .PGCreateOrder(request)
-//       .then((response) => {
-//         console.log("Order Created successfully:", response.data);
-//         res.json({ message: response.data });
-//       })
-//       .catch((error) => {
-//         console.error("Error:", error.response.data.message);
-//         res.json({ message: response.data.message });
-//       });
-//   } catch (err) {
-//     console.error(err.response?.data || err);
-//     res
-//       .status(500)
-//       .json({
-//         error: "Create order failed",
-//         details: err.response?.data || err.message,
-//       });
-//   }
-// });
+app.use(errorHandler);
 
 const CLIENT_ID = process.env.TCLIENT_ID;
 const CLIENT_SECRET = process.env.TCLIENT_SECRET;
@@ -1942,7 +1862,7 @@ app.get('/api/phonepe/check-status/:orderId', async (req, res) => {
 
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on http://0.0.0.0:${PORT}`);
+  console.log(`Server running on http://0.0.0.0:${PORT} (accessible from local network)`);
   startGoldPriceScheduler();
   startNotificationScheduler();
 });

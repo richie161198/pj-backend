@@ -1,9 +1,23 @@
 const cloudinary = require("cloudinary").v2;
 const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
+const os = require("os");
 
-// Configure multer for memory storage
+// Configure multer for memory storage (for images)
 const storage = multer.memoryStorage();
+
+// Configure disk storage for videos (to avoid memory issues with large files)
+const videoStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const tempDir = os.tmpdir();
+    cb(null, tempDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'video-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
 
 // File filter to accept images and videos
 const fileFilter = (req, file, cb) => {
@@ -20,7 +34,7 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Configure multer
+// Configure multer for images (5MB limit)
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
@@ -29,8 +43,27 @@ const upload = multer({
   },
 });
 
+// Configure multer for videos (100MB limit) - using disk storage
+const uploadVideo = multer({
+  storage: videoStorage,
+  fileFilter: (req, file, cb) => {
+    const allowedVideoTypes = /mp4|webm|mov|quicktime|avi/;
+    const extname = path.extname(file.originalname).toLowerCase();
+    const isVideo = allowedVideoTypes.test(extname) || file.mimetype.startsWith('video/');
+
+    if (isVideo) {
+      return cb(null, true);
+    } else {
+      cb(new Error("Only video files (mp4, webm, mov, avi) are allowed!"));
+    }
+  },
+  limits: {
+    fileSize: 100 * 1024 * 1024, // 100MB limit for videos
+  },
+});
+
 // Single image upload
-const uploadSingleImage = async (req, res) => {
+const uploadSingleImage = async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -84,6 +117,71 @@ const uploadSingleImage = async (req, res) => {
     console.error("Image upload error:", error);
     // Pass error to error handler middleware
     next(error);
+  }
+};
+
+// Single video upload
+const uploadSingleVideo = async (req, res, next) => {
+  let filePath = null;
+  
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "No video file provided",
+      });
+    }
+
+    filePath = req.file.path;
+    console.log(`📹 Uploading video: ${req.file.originalname} (${(req.file.size / (1024 * 1024)).toFixed(2)} MB)`);
+
+    // Upload video to Cloudinary using file path (better for large files)
+    const result = await cloudinary.uploader.upload(filePath, {
+      resource_type: "video",
+      folder: "precious-jewels/videos",
+      chunk_size: 6000000, // 6MB chunks for large files
+      timeout: 120000, // 2 minute timeout
+    });
+
+    console.log(`✅ Video uploaded successfully: ${result.public_id}`);
+
+    // Clean up temp file
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Video uploaded successfully",
+      data: {
+        public_id: result.public_id,
+        url: result.secure_url,
+        width: result.width,
+        height: result.height,
+        format: result.format,
+        bytes: result.bytes,
+        duration: result.duration,
+        thumbnail: result.secure_url.replace(/\.[^/.]+$/, ".jpg"), // Auto-generated thumbnail
+      },
+    });
+  } catch (error) {
+    console.error("❌ Video upload error:", error);
+    
+    // Clean up temp file on error
+    if (filePath && fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch (cleanupError) {
+        console.error("Error cleaning up temp file:", cleanupError);
+      }
+    }
+    
+    // Send error response
+    return res.status(500).json({
+      success: false,
+      message: "Video upload failed",
+      error: error.message || "Unknown error occurred",
+    });
   }
 };
 
@@ -230,9 +328,13 @@ const handleUploadError = (error, req, res, next) => {
   
   if (error instanceof multer.MulterError) {
     if (error.code === "LIMIT_FILE_SIZE") {
+      // Check if it's a video upload based on the route
+      const isVideoUpload = req.path && req.path.includes('video');
       return res.status(400).json({
         success: false,
-        message: "File size too large. Maximum size is 5MB.",
+        message: isVideoUpload 
+          ? "File size too large. Maximum video size is 100MB."
+          : "File size too large. Maximum size is 5MB.",
       });
     }
     if (error.code === "LIMIT_FILE_COUNT") {
@@ -248,7 +350,7 @@ const handleUploadError = (error, req, res, next) => {
     });
   }
   
-  if (error.message && (error.message.includes("Only image files") || error.message.includes("Only image files (jpeg") || error.message.includes("Only image files (jpeg, jpg"))) {
+  if (error.message && (error.message.includes("Only image files") || error.message.includes("Only video files"))) {
     return res.status(400).json({
       success: false,
       message: error.message,
@@ -270,7 +372,9 @@ const handleUploadError = (error, req, res, next) => {
 
 module.exports = {
   upload,
+  uploadVideo,
   uploadSingleImage,
+  uploadSingleVideo,
   uploadMultipleImages,
   deleteImage,
   getImageDetails,

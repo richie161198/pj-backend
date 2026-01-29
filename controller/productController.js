@@ -632,7 +632,7 @@ const getCart = expressAsyncHandler(async (req, res) => {
 
 const clearCart = expressAsyncHandler(async (req, res) => {
   try {
-    const { userId } = req.body;
+    const userId = req.user.id;
 
     await Cart.findOneAndDelete({ userId });
 

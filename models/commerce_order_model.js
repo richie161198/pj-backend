@@ -15,7 +15,7 @@ const ProductOrderSchema = new mongoose.Schema(
     totalAmount: { type: Number, required: true },
     status: {
       type: String,
-      enum: ["PLACED","CONFIRMED", "SHIPPED", "DELIVERED", "RETURNED", "REFUNDED", "RETURN_IN_PROGRESS", "REFUND_IN_PROGRESS"],
+      enum: ["PLACED","CONFIRMED", "SHIPPED", "DELIVERED", "RETURNED", "REFUNDED", "RETURN_IN_PROGRESS", "REFUND_IN_PROGRESS", "REPLACEMENT_REQUESTED", "REPLACEMENT_APPROVED", "REPLACEMENT_IN_PROGRESS"],
       default: "PLACED",
     },
     returnReason: { type: String },

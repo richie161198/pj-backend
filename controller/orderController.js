@@ -3,6 +3,7 @@ const orderModel = require("../models/orderModel");
 const productOrder = require("../models/commerce_order_model");
 const transactionSchema = require("../models/transcationModel");
 const InvestmentInvoice = require("../models/investmentInvoice_model");
+const Cart = require("../models/cart_model");
 
 const Shipment = require('../models/shipment_model');
 const User = require('../models/userModel');
@@ -31,8 +32,8 @@ const twilioClient = twilio(
 // WhatsApp Content Template SID
 // const WHATSAPP_TEMPLATE_SID = "HXf4af99bd1ba1e9a90b4b5fb2a872d441";
 // const WHATSAPP_TEMPLATE_SID = "HXea79ea3fb953907d6fcd2280bf605270";
+// const WHATSAPP_TEMPLATE_SID = "HX8a762b006cefbc5b46f149fd42ca00ad";
 const WHATSAPP_TEMPLATE_SID = process.env.WHATSAPP_TEMPLATE_SID;
-
 // Helper function to send WhatsApp message using Content Template
 async function sendWhatsAppMessage(phoneNumber, orderCode, invoiceNumber, totalAmount) {
   try {
@@ -1596,6 +1597,66 @@ console.log('📱 Sending WhatsApp message to customer:', customer.phone);
       // Don't fail the order if WhatsApp fails
     }
 
+    // Clear the user's cart after successful order placement
+    try {
+      await Cart.findOneAndDelete({ userId: req.user.id });
+      console.log('🛒 Cart cleared for user:', req.user.id);
+    } catch (cartError) {
+      console.error('❌ Error clearing cart:', cartError);
+      // Don't fail the order if cart clearing fails
+    }
+
+    // Update customer order statistics and tier
+    try {
+      const userToUpdate = await User.findById(req.user.id);
+      if (userToUpdate) {
+        // Increment order count and total value
+        userToUpdate.totalOrders = (userToUpdate.totalOrders || 0) + 1;
+        userToUpdate.totalOrderValue = (userToUpdate.totalOrderValue || 0) + parseFloat(totalAmount);
+        
+        // Update customer tier based on order count
+        const orderCount = userToUpdate.totalOrders;
+        if (orderCount >= 10) {
+          userToUpdate.customerTier = 'Elite';
+        } else if (orderCount >= 6) {
+          userToUpdate.customerTier = 'Gold';
+        } else if (orderCount >= 3) {
+          userToUpdate.customerTier = 'Silver';
+        } else {
+          userToUpdate.customerTier = 'Bronze';
+        }
+        
+        await userToUpdate.save();
+        console.log(`🏆 Customer stats updated - Orders: ${userToUpdate.totalOrders}, Value: ₹${userToUpdate.totalOrderValue}, Tier: ${userToUpdate.customerTier}`);
+      }
+    } catch (statsError) {
+      console.error('❌ Error updating customer stats:', statsError);
+      // Don't fail the order if stats update fails
+    }
+
+    // Decrease stock for each product in the order
+    try {
+      for (const item of items) {
+        const product = await Product.findById(item.productDataid);
+        if (product) {
+          const newStock = Math.max(0, (product.stock || 0) - (item.quantity || 1));
+          product.stock = newStock;
+          
+          // Set outOfStockDate if stock reaches 0
+          if (newStock === 0 && !product.outOfStockDate) {
+            product.outOfStockDate = new Date();
+            console.log(`📦 Product "${product.name}" is now out of stock`);
+          }
+          
+          await product.save();
+          console.log(`📦 Stock updated for "${product.name}": ${product.stock + (item.quantity || 1)} → ${newStock}`);
+        }
+      }
+    } catch (stockError) {
+      console.error('❌ Error updating product stock:', stockError);
+      // Don't fail the order if stock update fails
+    }
+
     res.status(201).json({ success: true, message: "Order placed", order });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1616,10 +1677,10 @@ const createReturnRefundRequest = async (req, res) => {
       });
     }
 
-    if (!['return', 'refund'].includes(requestType.toLowerCase())) {
+    if (!['return', 'replacement'].includes(requestType.toLowerCase())) {
       return res.status(400).json({
         success: false,
-        error: "requestType must be either 'return' or 'refund'"
+        error: "requestType must be either 'return' or 'replacement'"
       });
     }
 
@@ -1721,10 +1782,9 @@ const createReturnRefundRequest = async (req, res) => {
     const totalRequestedQty = validItems.reduce((sum, item) => sum + item.qty, 0);
 
     if (totalRequestedQty === totalOrderedQty) {
-      // Full return/refund
-      if (requestType.toLowerCase() === 'refund') {
-        order.status = 'REFUNDED';
-        order.refundAmount = totalRefundAmount;
+      // Full return/replacement
+      if (requestType.toLowerCase() === 'replacement') {
+        order.status = 'REPLACEMENT_REQUESTED';
       } else {
         order.status = 'RETURNED';
         order.returnReason = reason || additionalNotes || 'Return requested';
@@ -2471,17 +2531,17 @@ const acceptReturnRefundRequest = async (req, res) => {
       }
 
       if (totalRequestedQty === totalOrderedQty) {
-        // Full return/refund - mark order as fully returned/refunded
-        if (returnRequest.requestType === 'refund') {
-          order.status = 'REFUNDED';
+        // Full return/replacement - mark order as fully returned/replaced
+        if (returnRequest.requestType === 'replacement') {
+          order.status = 'REPLACEMENT_APPROVED';
         } else {
           order.status = 'RETURNED';
           order.returnReason = returnRequest.items[0]?.reason || 'Return approved';
         }
       } else {
-        // Partial return/refund - mark order as in progress
-        if (returnRequest.requestType === 'refund') {
-          order.status = 'REFUND_IN_PROGRESS';
+        // Partial return/replacement - mark order as in progress
+        if (returnRequest.requestType === 'replacement') {
+          order.status = 'REPLACEMENT_IN_PROGRESS';
         } else {
           order.status = 'RETURN_IN_PROGRESS';
           order.returnReason = returnRequest.items[0]?.reason || 'Return approved';

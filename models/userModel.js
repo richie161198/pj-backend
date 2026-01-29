@@ -188,6 +188,21 @@ const userSchema = mongoose.Schema(
         default: "Beginner",
       },
     ],
+    
+    // Customer Order Statistics
+    totalOrders: {
+      type: Number,
+      default: 0,
+    },
+    totalOrderValue: {
+      type: Number,
+      default: 0,
+    },
+    customerTier: {
+      type: String,
+      enum: ["Bronze", "Silver", "Gold", "Elite"],
+      default: "Bronze",
+    },
   },
   { timestamp: true, toJSON: { virtuals: true } }
 );

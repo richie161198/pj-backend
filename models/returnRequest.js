@@ -13,7 +13,7 @@ const ReturnRequestSchema = new mongoose.Schema({
   status: { type: String, enum: ["requested","approved","rejected","collected","completed"], default: "requested" },
   refundAmount: Number,
   rejectionMessage: { type: String },
-  requestType: { type: String, enum: ["return", "refund"] },
+  requestType: { type: String, enum: ["return", "replacement"] },
   createdAt: { type: Date, default: Date.now },
   updatedAt: Date
 });

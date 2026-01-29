@@ -55,7 +55,15 @@ const productSchema = new mongoose.Schema(
     Discount: { type: Number },
     isDiscountAvailable: { type: Boolean, default: false },
 
-    images: [{ type: String }]
+    images: [{ type: String }],
+
+    // Return & Replacement Policy
+    isReturnAllowed: { type: Boolean, default: true },
+    isReplacementAllowed: { type: Boolean, default: true },
+    returnReplacementDays: { type: Number, default: 5, min: 0 },
+    
+    // Stock Management
+    outOfStockDate: { type: Date, default: null }
   },
   { timestamps: true }
 );

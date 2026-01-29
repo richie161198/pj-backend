@@ -13,9 +13,33 @@ const bannerSchema = new mongoose.Schema({
     trim: true,
     maxlength: 500
   },
+  // Banner type: 'image' or 'video'
+  bannerType: {
+    type: String,
+    enum: ['image', 'video'],
+    default: 'image'
+  },
   imageUrl: {
     type: String,
     required: true,
+    trim: true
+  },
+  // Video URL for video banners
+  videoUrl: {
+    type: String,
+    required: false,
+    trim: true
+  },
+  // Video public ID for Cloudinary
+  videoPublicId: {
+    type: String,
+    required: false,
+    trim: true
+  },
+  // Video thumbnail
+  videoThumbnail: {
+    type: String,
+    required: false,
     trim: true
   },
   publicId: {

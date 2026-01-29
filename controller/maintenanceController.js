@@ -6,22 +6,7 @@ const Maintenance = require("../models/maintenance_model");
  */
 const getMaintenanceStatus = asyncHandler(async (req, res) => {
   try {
-    let maintenance = await Maintenance.findOne().sort({ updatedAt: -1 });
-    const now = new Date();
-    
-    // Auto-disable maintenance if estimated end time has passed
-    if (
-      maintenance &&
-      maintenance.isMaintenanceMode &&
-      maintenance.estimatedEndTime &&
-      maintenance.estimatedEndTime instanceof Date &&
-      maintenance.estimatedEndTime.getTime() <= now.getTime()
-    ) {
-      maintenance.isMaintenanceMode = false;
-      maintenance.isScheduled = false;
-      maintenance.scheduledEndTime = null;
-      await maintenance.save();
-    }
+    const maintenance = await Maintenance.findOne().sort({ updatedAt: -1 });
     
     if (!maintenance) {
       return res.status(200).json({
