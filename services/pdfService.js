@@ -1,13 +1,8 @@
-/**
- * PDF Generation Service using pdfmake
- * Replaces Puppeteer for lightweight PDF generation
- */
 
 const PdfPrinter = require('pdfmake');
 const fs = require('fs');
 const path = require('path');
 
-// Use standard PDF fonts (built into PDF format, no external files needed)
 const fonts = {
   Helvetica: {
     normal: 'Helvetica',

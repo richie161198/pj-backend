@@ -9,11 +9,15 @@ const GOLD_API_URL = 'https://www.goldapi.io/api/XAU/INR';
 const SILVER_API_URL = 'https://www.goldapi.io/api/XAG/INR';
 const FETCH_INTERVAL_MS = 12 * 60 * 60 * 1000; // 24 hours
 // const FETCH_INTERVAL_MS = 20 * 1000; // 24 hours]
-const token = process.env.GOLDAPI_TOKEN;
+  // const token = process.env.GOLDAPI_TOKEN || 'goldapi-1cxhm2smkaqq4tb-io';
+const token=process.env.GOLDAPI_TOKEN
 
 // Fetch price from GoldAPI and save
 const fetchAndSaveGoldPrice = asyncHandler(async (_req, _res, options = {}) => {
   const { silent = false } = options;
+  // const token = process.env.GOLDAPI_TOKEN || 'goldapi-3pz9dsmk3loabk-io';
+  // const token = process.env.GOLDAPI_TOKEN || 'GOLDAPI_TOKEN-3pz9dsmk3loabk-io';
+  // const token = process.env.GOLDAPI_TOKEN || 'goldapi-1cxhm2smkaqq4tb-io';
   // const token = '';
   try {
     const { data } = await axios.get(GOLD_API_URL, {
@@ -103,6 +107,7 @@ const fetchAndSaveGoldPrice = asyncHandler(async (_req, _res, options = {}) => {
 // Fetch price from SilverAPI and save
 const fetchAndSaveSilverPrice = asyncHandler(async (_req, _res, options = {}) => {
   const { silent = false } = options;
+  // const token = process.env.GOLDAPI_TOKEN || 'goldapi-1cxhm2smkaqq4tb-io';
   try {
     const { data } = await axios.get(SILVER_API_URL, {
       headers: {

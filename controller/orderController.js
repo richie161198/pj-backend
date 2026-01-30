@@ -32,8 +32,7 @@ const twilioClient = twilio(
 // WhatsApp Content Template SID
 // const WHATSAPP_TEMPLATE_SID = "HXf4af99bd1ba1e9a90b4b5fb2a872d441";
 // const WHATSAPP_TEMPLATE_SID = "HXea79ea3fb953907d6fcd2280bf605270";
-// const WHATSAPP_TEMPLATE_SID = "HX8a762b006cefbc5b46f149fd42ca00ad";
-const WHATSAPP_TEMPLATE_SID = process.env.WHATSAPP_TEMPLATE_SID;
+const WHATSAPP_TEMPLATE_SID = process.env.WHATSAPP_TEMPLATE_SID
 // Helper function to send WhatsApp message using Content Template
 async function sendWhatsAppMessage(phoneNumber, orderCode, invoiceNumber, totalAmount) {
   try {
@@ -852,7 +851,6 @@ const getAllOrderHistory = async (req, res) => {
 const getUserOrderHistory = async (req, res) => {
   try {
     const userId = req.user.id;
-    // const userId = "6895539eb12327731f85535f";
 
     if (!userId) {
       return res
@@ -860,7 +858,10 @@ const getUserOrderHistory = async (req, res) => {
         .json({ status: false, message: "User ID missing" });
     }
 
-    const orders = await transactionSchema.find({ userId });
+    const orders = await transactionSchema
+      .find({ userId })
+      .sort({ createdAt: -1 })
+      .lean();
     res.status(200).json({
       status: true,
       message: "User order history fetched successfully",

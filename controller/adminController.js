@@ -149,9 +149,9 @@ const loginAdmin = async (req, res) => {
     if (error.message === 'Invalid credentials') {
       statusCode = 401;
       message = 'Invalid email or password';
-    } else if (error.message === 'Account is temporarily locked') {
+    } else if (error.message && (error.message.includes('locked') || error.message.includes('too many failed'))) {
       statusCode = 423;
-      message = 'Account is temporarily locked due to too many failed login attempts';
+      message = error.message || 'Account is temporarily locked due to too many failed login attempts';
     }
 
     res.status(statusCode).json({

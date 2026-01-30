@@ -1,6 +1,9 @@
 const axios = require("axios");
 const Subscription = require("../models/subscription_model");
 const User = require("../models/userModel");
+const GoldPrice = require("../models/goldPrice_model");
+const InvestmentSettings = require("../models/investment_settings_model");
+const Transaction = require("../models/transcationModel");
 
 // PhonePe Autopay Configuration
 const PHONEPE_CONFIG = {
@@ -14,6 +17,93 @@ const PHONEPE_CONFIG = {
   clientId: process.env.PHONEPE_AUTOPAY_CLIENT_ID || "TEST-M23HLKE4QF87Z_25102",
   clientSecret: process.env.PHONEPE_AUTOPAY_CLIENT_SECRET || "Y2E1NWFhOGQtZjQ1YS00MjNmLThiZDYtYjA1NjlhMWUwOTVl",
   merchantId: process.env.PHONEPE_MERCHANT_ID || "M23HLKE4QF87Z",
+};
+
+/**
+ * Get live gold rate per gram (INR) - from InvestmentSettings or latest GoldPrice
+ */
+const getLiveGoldRatePerGram = async () => {
+  const settings = await InvestmentSettings.findOne().sort({ updatedAt: -1 });
+  if (settings && (settings.goldRate || settings.goldRate24kt)) {
+    return settings.goldRate24kt || settings.goldRate;
+  }
+  const latest = await GoldPrice.findOne().sort({ fetchedAt: -1 });
+  if (latest && latest.priceGram24k) {
+    return latest.priceGram24k;
+  }
+  return null;
+};
+
+/**
+ * Credit user gold at live rate when autopay redemption succeeds
+ * @param {string} userId - User _id
+ * @param {number} amountInr - Amount in INR (rupees)
+ * @param {string} merchantOrderId - Redemption order id for transaction record
+ * @returns {Promise<{ success: boolean, goldGm?: number, rate?: number, error?: string }>}
+ */
+const creditGoldOnAutopayRedemption = async (userId, amountInr, merchantOrderId) => {
+  try {
+    const uid = userId && (typeof userId === "string" ? userId : userId.toString());
+    if (!uid) {
+      console.warn("⚠️ Autopay gold credit: missing userId");
+      return { success: false, error: "Missing userId" };
+    }
+    const ratePerGram = await getLiveGoldRatePerGram();
+    if (!ratePerGram || ratePerGram <= 0) {
+      console.warn("⚠️ Autopay gold credit: No live gold rate available");
+      return { success: false, error: "No live gold rate" };
+    }
+    const goldGm = parseFloat((amountInr / ratePerGram).toFixed(4));
+    if (goldGm <= 0) {
+      return { success: false, error: "Invalid gold amount" };
+    }
+    const user = await User.findById(uid);
+    if (!user) {
+      console.warn("⚠️ Autopay gold credit: User not found", uid);
+      return { success: false, error: "User not found" };
+    }
+    const currentGold = parseFloat(user.goldBalance) || 0;
+    const newGold = currentGold + goldGm;
+    user.goldBalance = String(newGold);
+    await user.save();
+
+    const orderId = `AUTOPAY_${merchantOrderId || Date.now()}`;
+    const existing = await Transaction.findOne({ orderId });
+    if (existing) {
+      console.log(`⚠️ Autopay gold already credited for ${orderId}, skipping`);
+      return { success: true, goldGm: existing.goldQtyInGm, rate: existing.goldCurrentPrice };
+    }
+    await Transaction.create({
+      userId: uid,
+      orderId,
+      orderType: "autopay",
+      transactionType: "GOLD",
+      goldCurrentPrice: ratePerGram,
+      goldQtyInGm: goldGm,
+      inramount: amountInr,
+      status: "completed",
+      Payment_method: "UPI",
+    });
+    console.log(`✅ Autopay: Credited ${goldGm} gm gold at ₹${ratePerGram}/gm for user ${uid} (₹${amountInr})`);
+    return { success: true, goldGm, rate: ratePerGram };
+  } catch (err) {
+    console.error("❌ Autopay gold credit error:", err);
+    return { success: false, error: err.message };
+  }
+};
+
+/**
+ * When subscription status changes PENDING → ACTIVE, credit gold for subscription amount at live rate.
+ * Idempotent: uses orderId AUTOPAY_ACTIVE_${merchantSubscriptionId} so only credits once.
+ */
+const creditGoldWhenSubscriptionActivated = async (subscription) => {
+  const amountInr = parseFloat(subscription.amount) || 0;
+  if (amountInr <= 0 || !subscription.userId) {
+    console.warn("⚠️ Autopay activation credit: skip (no amount or userId)", subscription.merchantSubscriptionId);
+    return { success: false, error: "No amount or userId" };
+  }
+  const orderIdForCredit = `ACTIVE_${subscription.merchantSubscriptionId}`;
+  return creditGoldOnAutopayRedemption(subscription.userId, amountInr, orderIdForCredit);
 };
 
 /**
@@ -260,7 +350,13 @@ const checkOrderStatus = async (req, res) => {
     console.log("✅ Order Status Response:", response.data);
 
     // Update subscription status in database if exists
-    const subscription = await Subscription.findOne({ merchantOrderId });
+    // App sends PhonePe orderId; backend may have merchantOrderId (our MO_xxx) or phonepeOrderId (PhonePe's id)
+    const subscription = await Subscription.findOne({
+      $or: [
+        { merchantOrderId },
+        { phonepeOrderId: merchantOrderId },
+      ],
+    });
     if (subscription && response.data.state) {
       // Map PhonePe status to our subscription status enum
       let mappedStatus = response.data.state.toUpperCase();
@@ -273,6 +369,7 @@ const checkOrderStatus = async (req, res) => {
       // Only update if status is valid enum value
       const validStatuses = ["PENDING", "ACTIVE", "PAUSED", "REVOKED", "EXPIRED", "FAILED", "CANCELLED"];
       if (validStatuses.includes(mappedStatus)) {
+        const previousStatus = subscription.status;
         subscription.status = mappedStatus;
         
         // Update timestamps based on status
@@ -286,6 +383,10 @@ const checkOrderStatus = async (req, res) => {
         
         await subscription.save();
         console.log(`✅ Updated subscription ${subscription.merchantSubscriptionId} status to ${mappedStatus}`);
+        // When PENDING → ACTIVE, credit gold for subscription amount at live rate (idempotent)
+        if (previousStatus === "PENDING" && mappedStatus === "ACTIVE") {
+          await creditGoldWhenSubscriptionActivated(subscription);
+        }
       } else {
         console.warn(`⚠️ Invalid status from PhonePe: ${response.data.state}, skipping update`);
       }
@@ -347,6 +448,7 @@ const checkSubscriptionStatus = async (req, res) => {
       // Only update if status is valid enum value
       const validStatuses = ["PENDING", "ACTIVE", "PAUSED", "REVOKED", "EXPIRED", "FAILED", "CANCELLED"];
       if (validStatuses.includes(mappedStatus)) {
+        const previousStatus = subscription.status;
         subscription.status = mappedStatus;
         
         // Update timestamps based on status
@@ -360,6 +462,10 @@ const checkSubscriptionStatus = async (req, res) => {
         
         await subscription.save();
         console.log(`✅ Updated subscription ${merchantSubscriptionId} status to ${mappedStatus}`);
+        // When PENDING → ACTIVE, credit gold for subscription amount at live rate (idempotent)
+        if (previousStatus === "PENDING" && mappedStatus === "ACTIVE") {
+          await creditGoldWhenSubscriptionActivated(subscription);
+        }
       } else {
         console.warn(`⚠️ Invalid status from PhonePe: ${response.data.state}, skipping update`);
       }
@@ -511,16 +617,25 @@ const executeRedemption = async (req, res) => {
     console.log("✅ Execute Redemption Response:", response.data);
 
     // Store redemption details
+    const state = (response.data.state || "").toUpperCase();
     const redemption = {
       merchantOrderId,
       amount,
-      status: response.data.state || "PENDING",
+      status: state || "PENDING",
       executedAt: new Date(),
       transactionNote,
     };
     subscription.redemptions.push(redemption);
     subscription.lastRedemptionAt = new Date();
     await subscription.save();
+
+    // On successful debit, credit gold at live rate (broad success states)
+    const successStates = ["COMPLETED", "SUCCESS", "DEBITED", "PAID"];
+    if (successStates.includes(state)) {
+      await creditGoldOnAutopayRedemption(userId, amount, merchantOrderId);
+    } else {
+      console.log(`⚠️ Execute redemption state "${state}" not in success list; gold not credited`);
+    }
 
     res.status(200).json({
       success: true,
@@ -600,7 +715,8 @@ const cancelSubscription =async(req,res)=>{
 const revokeSubscription = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { merchantSubscriptionId, forceLocal } = req.body;
+    const { merchantSubscriptionId } = req.body;
+    console.log("merchantSubscriptionId",merchantSubscriptionId);
 
     if (!merchantSubscriptionId) {
       return res.status(400).json({
@@ -626,74 +742,11 @@ const revokeSubscription = async (req, res) => {
       });
     }
 
-    // const isSandbox = !process.env.PHONEPE_ENV || process.env.PHONEPE_ENV !== 'PRODUCTION';
-    
-    // // In sandbox mode or if forceLocal is true, only update local database
-    // if (isSandbox || forceLocal) {
-    //   console.log("📤 Cancelling subscription locally (sandbox mode or forceLocal)");
-      
-    //   subscription.status = "CANCELLED";
-    //   subscription.cancelledAt = new Date();
-    //   subscription.metadata = {
-    //     ...subscription.metadata,
-    //     cancelledInSandbox: isSandbox,
-    //     cancelledAt: new Date().toISOString(),
-    //   };
-    //   await subscription.save();
 
-    //   return res.status(200).json({
-    //     success: true,
-    //     message: isSandbox 
-    //       ? "Subscription cancelled locally (Sandbox mode - PhonePe cancel API not supported)"
-    //       : "Subscription cancelled locally",
-    //     localOnly: true,
-    //     data: {
-    //       merchantSubscriptionId,
-    //       status: "CANCELLED",
-    //       cancelledAt: subscription.cancelledAt,
-    //     },
-    //   });
-    // }
 
   const phonepeSubscriptionId = subscription.phonepeSubscriptionId;
   console.log("phonepeSubscriptionId",phonepeSubscriptionId);
 
-    // const hasRealPhonePeId = phonepeSubscriptionId && 
-    //                          typeof phonepeSubscriptionId === 'string' &&
-    //                          phonepeSubscriptionId.trim() !== "" &&
-    //                          phonepeSubscriptionId !== subscription.merchantSubscriptionId;
-    
-    // if (!hasRealPhonePeId) {
-    //   // If no real PhonePe subscription ID, cancel locally WITHOUT calling API
-    //   console.log("⚠️ No valid PhonePe subscription ID found, cancelling locally");
-    //   console.log("   merchantSubscriptionId:", subscription.merchantSubscriptionId);
-    //   console.log("   phonepeSubscriptionId:", phonepeSubscriptionId || "null/undefined");
-    //   console.log("   Status:", subscription.status);
-    //   console.log("   Reason: PhonePe subscription ID is missing, invalid, or same as merchant ID");
-      
-    //   subscription.status = "CANCELLED";
-    //   subscription.cancelledAt = new Date();
-    //   subscription.metadata = {
-    //     ...subscription.metadata,
-    //     cancelledLocally: true,
-    //     reason: "No valid PhonePe subscription ID available - subscription may not be fully activated yet",
-    //     cancelledAt: new Date().toISOString(),
-    //   };
-    //   await subscription.save();
-      
-    //   return res.status(200).json({
-    //     success: true,
-    //     message: "Subscription cancelled locally (No valid PhonePe subscription ID - subscription may not be fully activated)",
-    //     localOnly: true,
-    //     data: {
-    //       merchantSubscriptionId,
-    //       status: "CANCELLED",
-    //       cancelledAt: subscription.cancelledAt,
-    //     },
-    //   });
-    // }
-
-    // Only call PhonePe API if we have a valid PhonePe subscription ID
     const accessToken = await generateAuthToken();
 
     console.log("accessToken",accessToken)
@@ -726,53 +779,7 @@ const revokeSubscription = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Cancel Subscription Error:", error.response?.data || error.message);
-    
-    // Check if it's a sandbox API limitation error, invalid endpoint, or bad request
-    // const errorMessage = error.response?.data?.message || error.message || "";
-    // const errorString = JSON.stringify(error.response?.data || error.message || "");
-    // const errorCode = error.response?.status;
-    
-    // // Handle various PhonePe API errors that indicate the endpoint doesn't work
-    // const isApiError = errorMessage.includes("Api Mapping Not Found") || 
-    //                    errorMessage.includes("Not Found") ||
-    //                    errorMessage.includes("Bad Request") ||
-    //                    errorString.includes("Api Mapping Not Found") ||
-    //                    errorCode === 404 ||
-    //                    errorCode === 400;
-    
-    // if (isApiError) {
-    //   // API endpoint not available, invalid ID, or sandbox limitation - update locally
-    //   const subscription = await Subscription.findOne({ 
-    //     merchantSubscriptionId: req.body.merchantSubscriptionId, 
-    //     userId: req.user.id 
-    //   });
-      
-    //   if (subscription && subscription.status !== "CANCELLED" && subscription.status !== "REVOKED") {
-    //     subscription.status = "CANCELLED";
-    //     subscription.cancelledAt = new Date();
-    //     subscription.metadata = {
-    //       ...subscription.metadata,
-    //       cancelledInSandbox: true,
-    //       sandboxError: errorMessage || errorString,
-    //       cancelledViaFallback: true,
-    //       errorCode: errorCode,
-    //     };
-    //     await subscription.save();
-        
-    //     console.log("✅ Subscription cancelled locally due to API error");
-        
-    //     return res.status(200).json({
-    //       success: true,
-    //       message: "Subscription cancelled locally (PhonePe API error - endpoint may not be available or subscription ID invalid)",
-    //       localOnly: true,
-    //       data: {
-    //         merchantSubscriptionId: req.body.merchantSubscriptionId,
-    //         status: "CANCELLED",
-    //         cancelledAt: subscription.cancelledAt,
-    //       },
-    //     });
-    //   }
-    // }
+   
     
     res.status(400).json({
       success: false,
@@ -1272,23 +1279,80 @@ const syncSubscriptionStatuses = async (req, res) => {
     // Check status for each subscription
     for (const subscription of subscriptions) {
       try {
-        // Skip if no PhonePe subscription ID
-        if (!subscription.phonepeSubscriptionId && !subscription.merchantSubscriptionId) {
+        // For PENDING subscriptions: PhonePe may have completed the mandate but we only have phonepeOrderId.
+        // Use ORDER status API first to get COMPLETED -> ACTIVE and phonepeSubscriptionId.
+        if (subscription.status === "PENDING" && subscription.phonepeOrderId) {
+          try {
+            const orderResponse = await axios.get(
+              `${PHONEPE_CONFIG.baseUrl}/subscriptions/v2/order/${subscription.phonepeOrderId}/status?details=true`,
+              {
+                headers: {
+                  Authorization: `O-Bearer ${accessToken}`,
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+            if (orderResponse.data && orderResponse.data.state) {
+              let mappedStatus = orderResponse.data.state.toUpperCase();
+              if (mappedStatus === "COMPLETED") mappedStatus = "ACTIVE";
+              const validStatuses = ["PENDING", "ACTIVE", "PAUSED", "REVOKED", "EXPIRED", "FAILED", "CANCELLED"];
+              if (validStatuses.includes(mappedStatus) && subscription.status !== mappedStatus) {
+                subscription.status = mappedStatus;
+                if (mappedStatus === "ACTIVE" && !subscription.activatedAt) {
+                  subscription.activatedAt = new Date();
+                }
+                if (orderResponse.data.subscriptionId) {
+                  subscription.phonepeSubscriptionId = orderResponse.data.subscriptionId;
+                }
+                await subscription.save();
+                syncedCount++;
+                // PENDING → ACTIVE: credit gold for subscription amount at live rate (idempotent)
+                if (mappedStatus === "ACTIVE") {
+                  await creditGoldWhenSubscriptionActivated(subscription);
+                }
+              }
+              continue; // Already synced via order status
+            }
+          } catch (orderErr) {
+            // Fall through to subscription status if order API fails
+          }
+        }
+
+        // PhonePe subscription-status API accepts only their subscription ID (phonepeSubscriptionId),
+        // not our merchantSubscriptionId (SUB_xxx). Calling with SUB_xxx returns 400.
+        if (!subscription.phonepeSubscriptionId || subscription.phonepeSubscriptionId.trim() === "") {
+          continue;
+        }
+        // If phonepeSubscriptionId was ever stored as our merchant ID by mistake, skip to avoid 400
+        if (subscription.phonepeSubscriptionId === subscription.merchantSubscriptionId ||
+            String(subscription.phonepeSubscriptionId).startsWith("SUB_")) {
           continue;
         }
 
-        const subscriptionId = subscription.phonepeSubscriptionId || subscription.merchantSubscriptionId;
+        const subscriptionId = subscription.phonepeSubscriptionId;
 
-        // Call PhonePe API to get current status
-        const response = await axios.get(
-          `${PHONEPE_CONFIG.baseUrl}/subscriptions/v2/subscription/${subscriptionId}/status`,
-          {
-            headers: {
-              Authorization: `O-Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-            },
+        // Call PhonePe API to get current status (only with PhonePe's subscription ID)
+        let response;
+        try {
+          response = await axios.get(
+            `${PHONEPE_CONFIG.baseUrl}/subscriptions/v2/subscription/${subscriptionId}/status`,
+            {
+              headers: {
+                Authorization: `O-Bearer ${accessToken}`,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+        } catch (apiErr) {
+          // 400/404 = invalid or wrong-env ID; don't count as sync error, just skip
+          const status = apiErr.response?.status;
+          if (status === 400 || status === 404) {
+            console.warn(`⚠️ Skipping subscription ${subscription.merchantSubscriptionId}: PhonePe returned ${status} (invalid or wrong-env ID)`);
+          } else {
+            throw apiErr;
           }
-        );
+          continue;
+        }
 
         // Update subscription status if changed
         if (response.data && response.data.state) {
@@ -1304,6 +1368,7 @@ const syncSubscriptionStatuses = async (req, res) => {
           const validStatuses = ["PENDING", "ACTIVE", "PAUSED", "REVOKED", "EXPIRED", "FAILED", "CANCELLED"];
           if (validStatuses.includes(mappedStatus)) {
             if (subscription.status !== mappedStatus) {
+              const previousStatus = subscription.status;
               console.log(`🔄 Updating subscription ${subscription.merchantSubscriptionId}: ${subscription.status} → ${mappedStatus}`);
               subscription.status = mappedStatus;
               
@@ -1318,6 +1383,10 @@ const syncSubscriptionStatuses = async (req, res) => {
               
               await subscription.save();
               syncedCount++;
+              // PENDING → ACTIVE: credit gold for subscription amount at live rate (idempotent)
+              if (previousStatus === "PENDING" && mappedStatus === "ACTIVE") {
+                await creditGoldWhenSubscriptionActivated(subscription);
+              }
             }
           } else {
             console.warn(`⚠️ Invalid status from PhonePe for ${subscription.merchantSubscriptionId}: ${response.data.state}`);
@@ -1447,16 +1516,20 @@ const handleWebhook = async (req, res) => {
 
 // Webhook Helper Functions
 const handleSubscriptionSetupSuccess = async (data) => {
-  const subscription = await Subscription.findOne({
-    merchantSubscriptionId: data.merchantSubscriptionId,
-  });
-  if (subscription) {
-    subscription.status = "ACTIVE";
-    subscription.phonepeSubscriptionId = data.subscriptionId;
-    subscription.activatedAt = new Date();
-    await subscription.save();
-    console.log(`✅ Subscription ${data.merchantSubscriptionId} activated`);
-  }
+  const orConditions = [];
+  if (data.merchantSubscriptionId) orConditions.push({ merchantSubscriptionId: data.merchantSubscriptionId });
+  if (data.orderId) orConditions.push({ phonepeOrderId: data.orderId });
+  const subscription = orConditions.length
+    ? await Subscription.findOne({ $or: orConditions })
+    : null;
+  if (!subscription) return;
+  subscription.status = "ACTIVE";
+  subscription.phonepeSubscriptionId = data.subscriptionId || subscription.phonepeSubscriptionId;
+  subscription.activatedAt = subscription.activatedAt || new Date();
+  await subscription.save();
+  console.log(`✅ Subscription ${subscription.merchantSubscriptionId} activated`);
+  // PENDING → ACTIVE: credit gold for subscription amount at live rate (idempotent)
+  await creditGoldWhenSubscriptionActivated(subscription);
 };
 
 const handleSubscriptionSetupFailed = async (data) => {
@@ -1472,20 +1545,39 @@ const handleSubscriptionSetupFailed = async (data) => {
 };
 
 const handleRedemptionSuccess = async (data) => {
-  const subscription = await Subscription.findOne({
-    merchantSubscriptionId: data.merchantSubscriptionId,
-  });
-  if (subscription) {
-    const redemption = subscription.redemptions.find(
-      (r) => r.merchantOrderId === data.merchantOrderId
-    );
-    if (redemption) {
-      redemption.status = "COMPLETED";
-      redemption.transactionId = data.transactionId;
-      await subscription.save();
-    }
-    console.log(`✅ Redemption ${data.merchantOrderId} completed`);
+  const orConditions = [];
+  if (data.merchantSubscriptionId) orConditions.push({ merchantSubscriptionId: data.merchantSubscriptionId });
+  if (data.subscriptionId) orConditions.push({ phonepeSubscriptionId: data.subscriptionId });
+  const subscription = orConditions.length
+    ? await Subscription.findOne({ $or: orConditions })
+    : null;
+  if (!subscription) {
+    console.warn("⚠️ Redemption webhook: subscription not found", data.merchantSubscriptionId || data.subscriptionId);
+    return;
   }
+  const redemption = subscription.redemptions?.find(
+    (r) => r.merchantOrderId === data.merchantOrderId || r.merchantOrderId === data.orderId
+  );
+  if (redemption) {
+    redemption.status = "COMPLETED";
+    redemption.transactionId = data.transactionId;
+    await subscription.save();
+  }
+  // Amount: prefer our stored redemption (rupees), else webhook amount (typically paise)
+  let amountInr = redemption?.amount;
+  if (amountInr == null && data.amount != null) {
+    const raw = Number(data.amount);
+    amountInr = raw >= 100 ? raw / 100 : raw; // paise -> rupees if looks like paise
+  }
+  const orderIdForCredit = data.merchantOrderId || data.orderId || `REDEEM_${subscription._id}_${Date.now()}`;
+  if (amountInr > 0 && subscription.userId) {
+    await creditGoldOnAutopayRedemption(
+      subscription.userId,
+      amountInr,
+      orderIdForCredit
+    );
+  }
+  console.log(`✅ Redemption ${data.merchantOrderId || data.orderId} completed`);
 };
 
 const handleRedemptionFailed = async (data) => {
