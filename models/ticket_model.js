@@ -45,6 +45,10 @@ const ticketSchema = new mongoose.Schema(
         timestamp: { type: Date, default: Date.now },
       },
     ],
+    // Unread: admin has not viewed this ticket / no new user message since last view
+    readByAdmin: { type: Boolean, default: false },
+    // Unread: user has not viewed new admin reply
+    readByUser: { type: Boolean, default: true },
   },
   { timestamps: true }
 );

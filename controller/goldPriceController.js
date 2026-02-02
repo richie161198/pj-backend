@@ -10,7 +10,7 @@ const SILVER_API_URL = 'https://www.goldapi.io/api/XAG/INR';
 const FETCH_INTERVAL_MS = 12 * 60 * 60 * 1000; // 24 hours
 // const FETCH_INTERVAL_MS = 20 * 1000; // 24 hours]
   // const token = process.env.GOLDAPI_TOKEN || 'goldapi-1cxhm2smkaqq4tb-io';
-const token=process.env.GOLDAPI_TOKEN
+const token=process.env.GOLDAPI_TOKEN;
 
 // Fetch price from GoldAPI and save
 const fetchAndSaveGoldPrice = asyncHandler(async (_req, _res, options = {}) => {

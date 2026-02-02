@@ -204,7 +204,7 @@ const userSchema = mongoose.Schema(
       default: "Bronze",
     },
   },
-  { timestamp: true, toJSON: { virtuals: true } }
+  { timestamps: true, toJSON: { virtuals: true } }
 );
 
 module.exports = mongoose.model("User", userSchema);

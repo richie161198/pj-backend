@@ -9,7 +9,7 @@ const invoiceSchema = new mongoose.Schema({
   },
   orderId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Order',
+    ref: 'ProductOrder', // Commerce/product orders (commerce_order_model)
     required: false,
     index: true
   },

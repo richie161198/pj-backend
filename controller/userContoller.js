@@ -389,7 +389,9 @@ const getMyTickets = asyncHandler(async (req, res) => {
       createdAt: -1,
     });
 
-    res.status(200).json({ success: true, tickets });
+    const unreadCount = await Ticket.countDocuments({ user: req.user.id, readByUser: false });
+
+    res.status(200).json({ success: true, tickets, unreadCount });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -404,6 +406,12 @@ const getTicketById = asyncHandler(async (req, res) => {
     // ensure user owns the ticket
     if (ticket.user.toString() !== req.user.id) {
       return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    // Mark as read by user when they view the ticket
+    if (!ticket.readByUser) {
+      ticket.readByUser = true;
+      await ticket.save();
     }
 
     res.status(200).json({ success: true, ticket });
@@ -473,6 +481,12 @@ const getTicketByIdAdmin = asyncHandler(async (req, res) => {
 
     if (!ticket) return res.status(404).json({ message: "Ticket not found" });
 
+    // Mark as read by admin when they view the ticket
+    if (!ticket.readByAdmin) {
+      ticket.readByAdmin = true;
+      await ticket.save();
+    }
+
     res.status(200).json({ success: true, ticket });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -514,7 +528,8 @@ const getTicketStats = asyncHandler(async (req, res) => {
           open: { $sum: { $cond: [{ $eq: ['$status', 'open'] }, 1, 0] } },
           inProgress: { $sum: { $cond: [{ $eq: ['$status', 'in-progress'] }, 1, 0] } },
           resolved: { $sum: { $cond: [{ $eq: ['$status', 'resolved'] }, 1, 0] } },
-          closed: { $sum: { $cond: [{ $eq: ['$status', 'closed'] }, 1, 0] } }
+          closed: { $sum: { $cond: [{ $eq: ['$status', 'closed'] }, 1, 0] } },
+          unread: { $sum: { $cond: [{ $ne: ['$readByAdmin', true] }, 1, 0] } }
         }
       }
     ]);
@@ -528,11 +543,13 @@ const getTicketStats = asyncHandler(async (req, res) => {
       }
     ]);
 
+    const overview = stats[0] || { total: 0, open: 0, inProgress: 0, resolved: 0, closed: 0, unread: 0 };
+
     res.status(200).json({
       success: true,
       message: "Ticket statistics fetched successfully",
       data: {
-        overview: stats[0] || { total: 0, open: 0, inProgress: 0, resolved: 0, closed: 0 },
+        overview: { ...overview, unread: overview.unread ?? 0 },
         categoryStats
       }
     });
@@ -558,6 +575,14 @@ const addTicketReply = asyncHandler(async (req, res) => {
 
     if (!ticket.replies) ticket.replies = [];
     ticket.replies.push(reply);
+
+    // User replied -> mark unread for admin; admin replied (non-internal) -> mark unread for user
+    const isUserReplying = ticket.user.toString() === req.user.id;
+    if (isUserReplying) {
+      ticket.readByAdmin = false;
+    } else if (!isInternal) {
+      ticket.readByUser = false;
+    }
 
     await ticket.save();
     await ticket.populate('user', 'name email phone');

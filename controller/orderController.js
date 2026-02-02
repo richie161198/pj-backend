@@ -32,7 +32,8 @@ const twilioClient = twilio(
 // WhatsApp Content Template SID
 // const WHATSAPP_TEMPLATE_SID = "HXf4af99bd1ba1e9a90b4b5fb2a872d441";
 // const WHATSAPP_TEMPLATE_SID = "HXea79ea3fb953907d6fcd2280bf605270";
-const WHATSAPP_TEMPLATE_SID = process.env.WHATSAPP_TEMPLATE_SID
+const WHATSAPP_TEMPLATE_SID = process.env.WHATSAPP_TEMPLATE_SID;
+
 // Helper function to send WhatsApp message using Content Template
 async function sendWhatsAppMessage(phoneNumber, orderCode, invoiceNumber, totalAmount) {
   try {
@@ -402,6 +403,8 @@ const buyOrSellGold = async (req, res) => {
     const user = await userModel.findById(userId);
     if (!user)
       return res.status(404).json({ status: false, message: "User not found" });
+    if (user.isBlocked)
+      return res.status(403).json({ status: false, message: "Your account is blocked. You cannot place investment orders." });
 
     const orderId = `PGORD-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 
@@ -911,6 +914,12 @@ const getParticularOrderHistory = async (req, res) => {
 // Place Order
 const placeOrder = async (req, res) => {
   try {
+    // Blocked users cannot place product orders
+    const currentUser = await User.findById(req.user.id);
+    if (currentUser && currentUser.isBlocked) {
+      return res.status(403).json({ status: false, message: "Your account is blocked. You cannot place orders." });
+    }
+
     const { items, totalAmount, deliveryAddress, name, phone, street,
       city,
       state,

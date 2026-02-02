@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { adminAuth } = require("../middleware/adminAuth");
 const { isAuth } = require("../middleware/tokenValidation");
-const { createAppointment, listAppointments, getUserAppointments, markAppointmentContacted } = require('../controller/appointmentController');
+const { createAppointment, listAppointments, getUserAppointments, getAppointmentUnmarkedCount, markAppointmentContacted } = require('../controller/appointmentController');
 
 // Optional auth middleware - doesn't fail if no token
 const optionalAuth = async (req, res, next) => {
@@ -41,6 +41,9 @@ router.get('/my-appointments', isAuth, getUserAppointments);
 
 // Admin: list appointments
 router.get('/admin', adminAuth, listAppointments);
+
+// Admin: unmarked count (for sidebar badge)
+router.get('/admin/unmarked-count', adminAuth, getAppointmentUnmarkedCount);
 
 // Admin: mark contacted
 router.patch('/admin/:id/contacted', adminAuth, markAppointmentContacted);

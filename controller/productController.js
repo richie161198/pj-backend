@@ -646,6 +646,12 @@ const checkout = expressAsyncHandler(async (req, res) => {
   try {
     const { userId, addressId, paymentMethod } = req.body;
 
+    // Blocked users cannot place orders
+    const user = await User.findById(userId);
+    if (user && user.isBlocked) {
+      return res.status(403).json({ status: false, message: "Your account is blocked. You cannot place orders." });
+    }
+
     // fetch cart
     const cart = await Cart.findOne({ userId }).populate("items.productId");
     if (!cart || cart.items.length === 0) {

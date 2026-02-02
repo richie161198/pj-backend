@@ -9,6 +9,7 @@ const {
   updateReview,
   approveReview,
   rejectReview,
+  addReviewByAdmin,
 } = require("../controller/reviewController");
 
 // User routes
@@ -18,6 +19,7 @@ router.put("/:reviewId", isAuth, updateReview);
 
 // Admin routes
 router.get("/admin/all", isAuth, isAdmin, getAllReviews);
+router.post("/admin", isAuth, isAdmin, addReviewByAdmin);
 router.put("/admin/:reviewId/approve", isAuth, isAdmin, approveReview);
 router.put("/admin/:reviewId/reject", isAuth, isAdmin, rejectReview);
 router.delete("/admin/:reviewId", isAuth, isAdmin, deleteReview);

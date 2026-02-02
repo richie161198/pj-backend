@@ -123,6 +123,15 @@ const getUserAppointments = asyncHandler(async (req, res) => {
   });
 });
 
+// Admin: get unmarked (unseen) appointments count for sidebar badge
+const getAppointmentUnmarkedCount = asyncHandler(async (req, res) => {
+  const unmarkedCount = await Appointment.countDocuments({ contacted: false });
+  return res.status(200).json({
+    status: true,
+    data: { unmarkedCount },
+  });
+});
+
 // Admin: mark contacted
 const markAppointmentContacted = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -150,6 +159,7 @@ module.exports = {
   createAppointment,
   listAppointments,
   getUserAppointments,
+  getAppointmentUnmarkedCount,
   markAppointmentContacted,
 };
 

@@ -191,7 +191,7 @@ const getAllInvoices = asyncHandler(async (req, res) => {
 
     const invoices = await Invoice.find(query)
       .populate('customerId', 'name email phone')
-      .populate('orderId', 'orderNumber status')
+      .populate('orderId', 'orderCode orderNumber status')
       .populate('createdBy', 'name email')
       .sort({ createdAt: -1 })
       .limit(limit * 1)

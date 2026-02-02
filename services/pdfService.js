@@ -429,7 +429,7 @@ const generateInvestmentInvoicePdf = async (invoiceData) => {
           body: [[
             {
               stack: [
-                { text: 'Total Amount Payable', alignment: 'center', fontSize: 10, color: '#555', margin: [0, 12, 0, 6] },
+                { text: 'Total Amount Paid', alignment: 'center', fontSize: 10, color: '#555', margin: [0, 12, 0, 6] },
                 { text: formatAmt(finalTotal), fontSize: 20, bold: true, color: goldColor, alignment: 'center', margin: [0, 0, 0, 12] }
               ]
             }
@@ -885,7 +885,7 @@ parseFloat(shippingAmount) > 0 ? {
               body: [[
                 {
                   stack: [
-                    { text: 'Total Amount Payable', alignment: 'center', fontSize: 10, color: '#555', margin: [0, 12, 0, 6] },
+                    { text: 'Total Amount Paid', alignment: 'center', fontSize: 10, color: '#555', margin: [0, 12, 0, 6] },
                     { text: formatAmt(finalTotalWithShipping), fontSize: 20, bold: true, color: goldColor, alignment: 'center', margin: [0, 0, 0, 12] }
                   ]
                 }

@@ -448,6 +448,73 @@ const updateReview = expressAsyncHandler(async (req, res) => {
   }
 });
 
+/**
+ * Add a review as admin (for a product) - creates approved review, updates product rating
+ */
+const addReviewByAdmin = expressAsyncHandler(async (req, res) => {
+  try {
+    const { productId, rating, title, body, userName: displayName } = req.body;
+    const adminId = req.user.id;
+
+    if (!productId || rating === undefined || !body) {
+      return res.status(400).json({
+        status: false,
+        message: "Product ID, rating, and review body are required",
+      });
+    }
+
+    const ratingNum = parseInt(rating, 10);
+    if (isNaN(ratingNum) || ratingNum < 1 || ratingNum > 5) {
+      return res.status(400).json({
+        status: false,
+        message: "Rating must be between 1 and 5",
+      });
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({
+        status: false,
+        message: "Product not found",
+      });
+    }
+
+    const review = new Review({
+      userId: adminId,
+      productId,
+      userName: displayName && String(displayName).trim() ? String(displayName).trim() : "Admin",
+      userEmail: null,
+      rating: ratingNum,
+      title: title ? String(title).trim() : "",
+      body: String(body).trim(),
+      isVerified: false,
+      status: "approved",
+      reviewedBy: adminId,
+      reviewedAt: new Date(),
+    });
+
+    await review.save();
+    const updatedRating = await recalculateProductRating(productId);
+
+    await review.populate("userId", "name email");
+    await review.populate("productId", "name images");
+
+    res.status(201).json({
+      status: true,
+      message: "Review added successfully",
+      review,
+      updatedProductRating: updatedRating,
+    });
+  } catch (error) {
+    console.error("Add review by admin error:", error);
+    res.status(500).json({
+      status: false,
+      message: "Error adding review",
+      error: error.message,
+    });
+  }
+});
+
 module.exports = {
   addReview,
   getProductReviews,
@@ -456,5 +523,6 @@ module.exports = {
   updateReview,
   approveReview,
   rejectReview,
+  addReviewByAdmin,
 };
 
