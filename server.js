@@ -21,6 +21,8 @@ const { v4: uuidv4 } = require("uuid");
 const fs = require("fs");
 const { startGoldPriceScheduler } = require("./controller/goldPriceController");
 const { startNotificationScheduler } = require("./services/notificationScheduler");
+const { CronJob } = require("cron");
+const { runDailyAutopayCharges } = require("./controller/autopayController");
 
 const logoBase64 = fs.readFileSync("public/logo/23.png").toString("base64");
 
@@ -1194,6 +1196,10 @@ io.on('connection', (socket) => {
 
       if (!ticket.replies) ticket.replies = [];
       ticket.replies.push(reply);
+      // Admin non-internal reply -> mark as unread for user
+      if (!isOwner && isAdminRole(socket.userRole) && !(isInternal && isAdmin)) {
+        ticket.readByUser = false;
+      }
       await ticket.save();
 
       // Populate reply data
@@ -1240,6 +1246,30 @@ io.on('connection', (socket) => {
             sender: socket.userName,
             subject: ticket.subject
           });
+        }
+
+        // Create in-app notification for user when admin sends unread reply (same as chat workflow)
+        if (!reply.isInternal) {
+          try {
+            const Notification = require('./models/notification_model');
+            const messagePreview = message.length > 100 ? message.substring(0, 97) + '...' : message;
+            const ticketNotification = new Notification({
+              title: 'New reply on your support ticket',
+              message: `${ticket.subject}: ${messagePreview}`,
+              type: 'support_ticket',
+              priority: 'normal',
+              targetAudience: 'specific_users',
+              targetUsers: [ticket.user],
+              status: 'sent',
+              createdBy: socket.userId,
+              metadata: { ticketId: ticket._id.toString() },
+              actionType: 'open_screen',
+              screenName: 'support_ticket',
+            });
+            await ticketNotification.save();
+          } catch (notifErr) {
+            console.error('Failed to create ticket reply notification:', notifErr);
+          }
         }
       }
 
@@ -1865,4 +1895,12 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on http://0.0.0.0:${PORT} (accessible from local network)`);
   startGoldPriceScheduler();
   startNotificationScheduler();
+  // Daily autopay: run at 9:00 AM IST for ACTIVE + DAILY subscriptions not yet charged today
+  const dailyAutopayJob = CronJob.from({
+    cronTime: "0 9 * * *",
+    onTick: runDailyAutopayCharges,
+    timeZone: "Asia/Kolkata",
+    start: true,
+  });
+  console.log("Autopay daily cron scheduled at 9:00 AM IST");
 });

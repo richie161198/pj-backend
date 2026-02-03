@@ -10,6 +10,7 @@ const {
   checkSubscriptionStatus,
   notifyRedemption,
   executeRedemption,
+  runDailyAutopayCharges,
   revokeSubscription,
   pauseSubscription,
   unpauseSubscription,
@@ -43,6 +44,17 @@ router.post("/refund", isAuth, initiateRefund);
 
 // Admin routes
 router.get("/admin/subscriptions", adminAuth, getAllSubscriptionsAdmin);
+
+// Temporary: trigger daily autopay cron manually (for testing). Remove after testing.
+router.post("/cron/daily", adminAuth, async (req, res) => {
+  try {
+    await runDailyAutopayCharges();
+    res.status(200).json({ success: true, message: "Daily autopay cron triggered" });
+  } catch (err) {
+    console.error("cron/daily error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 module.exports = router;
 

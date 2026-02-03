@@ -413,7 +413,7 @@ const buyOrSellGold = async (req, res) => {
     const currentINRBalance = parseFloat(user.balanceINR) || 0;
 
     if (orderType === "buy") {
-      const newGoldBalance = +(currentGoldBalance + parseFloat(goldQty)).toFixed(4);
+      const newGoldBalance = (currentGoldBalance + parseFloat(goldQty)).toFixed(4);
 
       await userModel.findByIdAndUpdate(userId, {
         goldBalance: newGoldBalance,
@@ -647,8 +647,8 @@ const buyOrSellGold = async (req, res) => {
       }
 
       const receivedAmount = parseFloat(inrAmount);
-      const newGoldBalance = +(currentGoldBalance - parseFloat(goldQty)).toFixed(4);
-      const newINRBalance = +(currentINRBalance + receivedAmount).toFixed(2);
+      const newGoldBalance = (currentGoldBalance - parseFloat(goldQty)).toFixed(4);
+      const newINRBalance = (currentINRBalance + receivedAmount).toFixed(2);
 
       await userModel.findByIdAndUpdate(userId, {
         goldBalance: newGoldBalance,

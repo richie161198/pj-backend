@@ -98,7 +98,8 @@ const userSchema = mongoose.Schema(
     },
     goldBalance: {
       type: String,
-      default: 0,
+      default: "0",
+      set: (v) => (parseFloat(v) || 0).toFixed(4),
     },
     address: [addressSchema],
     appId: {

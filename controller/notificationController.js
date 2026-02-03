@@ -669,7 +669,7 @@ const getUserNotificationStats = async (req, res) => {
         { targetUsers: userId },
         { targetSegment: { $exists: true } }
       ],
-      readBy: { $ne: userId }
+      readBy: { $nin: [userId] }
     });
     
     const byType = await Notification.aggregate([

@@ -63,8 +63,8 @@ const creditGoldOnAutopayRedemption = async (userId, amountInr, merchantOrderId)
       return { success: false, error: "User not found" };
     }
     const currentGold = parseFloat(user.goldBalance) || 0;
-    const newGold = currentGold + goldGm;
-    user.goldBalance = String(newGold);
+    const newGold = (currentGold + goldGm).toFixed(4);
+    user.goldBalance = newGold;
     await user.save();
 
     const orderId = `AUTOPAY_${merchantOrderId || Date.now()}`;
@@ -422,8 +422,9 @@ const checkSubscriptionStatus = async (req, res) => {
 
     const accessToken = await generateAuthToken();
 
+    // PhonePe path: /subscriptions/v2/{merchantSubscriptionId}/status (no "subscription" segment)
     const response = await axios.get(
-      `${PHONEPE_CONFIG.baseUrl}/subscriptions/v2/subscription/${merchantSubscriptionId}/status`,
+      `${PHONEPE_CONFIG.baseUrl}/subscriptions/v2/${merchantSubscriptionId}/status?details=true`,
       {
         headers: {
           Authorization: `O-Bearer ${accessToken}`,
@@ -593,19 +594,22 @@ const executeRedemption = async (req, res) => {
 
     const accessToken = await generateAuthToken();
     const merchantOrderId = `REDEEM_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    const amountPaise = Math.round(amount * 100);
 
-    const payload = {
+    // Step 1: Notify (required by PhonePe before Redeem)
+    const notifyPayload = {
       merchantOrderId,
-      merchantSubscriptionId,
-      amount: Math.round(amount * 100), // Convert to paise
-      transactionNote: transactionNote || "Precious Goldsmith AutoPay Payment",
+      amount: amountPaise,
+      expireAt: Date.now() + 48 * 60 * 60 * 1000, // 48 hrs
+      paymentFlow: {
+        type: "SUBSCRIPTION_REDEMPTION",
+        merchantSubscriptionId,
+      },
     };
-
-    console.log("📤 PhonePe Execute Redemption Payload:", JSON.stringify(payload, null, 2));
-
-    const response = await axios.post(
-      `${PHONEPE_CONFIG.baseUrl}/subscriptions/v2/execute`,
-      payload,
+    console.log("📤 PhonePe Notify Payload:", JSON.stringify(notifyPayload, null, 2));
+    const notifyResponse = await axios.post(
+      `${PHONEPE_CONFIG.baseUrl}/subscriptions/v2/notify`,
+      notifyPayload,
       {
         headers: {
           Authorization: `O-Bearer ${accessToken}`,
@@ -613,7 +617,21 @@ const executeRedemption = async (req, res) => {
         },
       }
     );
+    console.log("✅ PhonePe Notify Response:", notifyResponse.data);
 
+    // Step 2: Redeem (debit) – use same merchantOrderId as in Notify
+    const redeemPayload = { merchantOrderId };
+    console.log("📤 PhonePe Redeem Payload:", redeemPayload);
+    const response = await axios.post(
+      `${PHONEPE_CONFIG.baseUrl}/subscriptions/v2/redeem`,
+      redeemPayload,
+      {
+        headers: {
+          Authorization: `O-Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
     console.log("✅ Execute Redemption Response:", response.data);
 
     // Store redemption details
@@ -654,6 +672,85 @@ const executeRedemption = async (req, res) => {
       message: "Failed to execute redemption",
       error: error.response?.data || error.message,
     });
+  }
+};
+
+/**
+ * Execute redemption server-side (no req/res). Used by cron for daily autopay.
+ * @param {object} subscription - Subscription document (with userId, merchantSubscriptionId, amount, redemptions)
+ * @returns {Promise<{ success: boolean, error?: string }>}
+ */
+const executeRedemptionServerSide = async (subscription) => {
+  try {
+    const userId = subscription.userId?.toString?.() || subscription.userId;
+    const amount = parseFloat(subscription.amount) || 0;
+    const merchantSubscriptionId = subscription.merchantSubscriptionId;
+
+    if (!userId || !merchantSubscriptionId || amount <= 0) {
+      return { success: false, error: "Missing userId, merchantSubscriptionId or invalid amount" };
+    }
+
+    const accessToken = await generateAuthToken();
+    const merchantOrderId = `REDEEM_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    const amountPaise = Math.round(amount * 100);
+
+    // Step 1: Notify (required by PhonePe before Redeem)
+    const notifyPayload = {
+      merchantOrderId,
+      amount: amountPaise,
+      expireAt: Date.now() + 48 * 60 * 60 * 1000,
+      paymentFlow: {
+        type: "SUBSCRIPTION_REDEMPTION",
+        merchantSubscriptionId,
+      },
+    };
+    await axios.post(
+      `${PHONEPE_CONFIG.baseUrl}/subscriptions/v2/notify`,
+      notifyPayload,
+      {
+        headers: {
+          Authorization: `O-Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    // Step 2: Redeem (debit) – same merchantOrderId as Notify
+    const response = await axios.post(
+      `${PHONEPE_CONFIG.baseUrl}/subscriptions/v2/redeem`,
+      { merchantOrderId },
+      {
+        headers: {
+          Authorization: `O-Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const state = (response.data.state || "").toUpperCase();
+
+    const redemption = {
+      merchantOrderId,
+      amount,
+      status: state || "PENDING",
+      executedAt: new Date(),
+      transactionNote: "Precious Goldsmith AutoPay Daily Payment",
+    };
+    subscription.redemptions.push(redemption);
+    subscription.lastRedemptionAt = new Date();
+    await subscription.save();
+
+    const successStates = ["COMPLETED", "SUCCESS", "DEBITED", "PAID"];
+    if (successStates.includes(state)) {
+      await creditGoldOnAutopayRedemption(userId, amount, merchantOrderId);
+    } else {
+      console.log(`⚠️ Cron execute redemption state "${state}" for ${merchantSubscriptionId}; gold not credited`);
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("❌ executeRedemptionServerSide Error:", error.response?.data || error.message);
+    return { success: false, error: error.response?.data?.message || error.message };
   }
 };
 
@@ -1148,16 +1245,22 @@ const validateUpiAddress = async (req, res) => {
 };
 
 /**
- * Get User Subscriptions
+ * Get User Subscriptions (optionally filter by plan: amount, frequency)
  */
 const getUserSubscriptions = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { status, page = 1, limit = 10 } = req.query;
+    const { status, page = 1, limit = 10, amount, frequency } = req.query;
 
     const filter = { userId };
     if (status) {
       filter.status = status;
+    }
+    if (amount != null && amount !== "") {
+      filter.amount = parseFloat(amount);
+    }
+    if (frequency) {
+      filter.frequency = frequency.toUpperCase();
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -1192,12 +1295,12 @@ const getUserSubscriptions = async (req, res) => {
 };
 
 /**
- * Get All Subscriptions (Admin)
+ * Get All Subscriptions (Admin). Optionally filter by plan: amount, frequency.
  * GET /api/v0/autopay/admin/subscriptions
  */
 const getAllSubscriptionsAdmin = async (req, res) => {
   try {
-    const { status, page = 1, limit = 20, search, userId } = req.query;
+    const { status, page = 1, limit = 20, search, userId, amount, frequency } = req.query;
 
     const filter = {};
     
@@ -1207,6 +1310,12 @@ const getAllSubscriptionsAdmin = async (req, res) => {
     
     if (userId) {
       filter.userId = userId;
+    }
+    if (amount != null && amount !== "") {
+      filter.amount = parseFloat(amount);
+    }
+    if (frequency) {
+      filter.frequency = frequency.toUpperCase();
     }
     
     if (search) {
@@ -1609,6 +1718,65 @@ const handleSubscriptionCancelled = async (data) => {
   }
 };
 
+/** Get today's date string (YYYY-MM-DD) in Asia/Kolkata (IST) */
+const getTodayISTDateString = () => {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return formatter.format(new Date());
+};
+
+/** True if subscription has any redemption with executedAt on the given IST date string */
+const wasChargedOnISTDate = (subscription, istDateStr) => {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const redemptions = subscription.redemptions || [];
+  return redemptions.some((r) => {
+    if (!r.executedAt) return false;
+    const rStr = formatter.format(new Date(r.executedAt));
+    return rStr === istDateStr;
+  });
+};
+
+/**
+ * Run daily autopay charges for all ACTIVE subscriptions with frequency DAILY
+ * that have not been charged today (IST). Call this from a cron job (e.g. 9:00 AM IST).
+ */
+const runDailyAutopayCharges = async () => {
+  try {
+    const todayIST = getTodayISTDateString();
+    const subscriptions = await Subscription.find({
+      status: "ACTIVE",
+      frequency: "DAILY",
+    }).lean();
+
+    const toCharge = subscriptions.filter((sub) => !wasChargedOnISTDate(sub, todayIST));
+    if (toCharge.length === 0) {
+      console.log(`📅 Daily autopay: no subscriptions due for ${todayIST}`);
+      return;
+    }
+
+    console.log(`📅 Daily autopay: running ${toCharge.length} redemption(s) for ${todayIST}`);
+    for (const sub of toCharge) {
+      const subscription = await Subscription.findById(sub._id);
+      if (!subscription || subscription.status !== "ACTIVE" || subscription.frequency !== "DAILY") continue;
+      const result = await executeRedemptionServerSide(subscription);
+      if (!result.success) {
+        console.error(`❌ Daily autopay failed for ${subscription.merchantSubscriptionId}:`, result.error);
+      }
+    }
+  } catch (err) {
+    console.error("❌ runDailyAutopayCharges error:", err);
+  }
+};
+
 module.exports = {
   getAuthToken,
   setupSubscription,
@@ -1617,6 +1785,8 @@ module.exports = {
   notifyRedemption,
   getAllSubscriptionsAdmin,
   executeRedemption,
+  executeRedemptionServerSide,
+  runDailyAutopayCharges,
   revokeSubscription,
   pauseSubscription,
   unpauseSubscription,
@@ -1624,6 +1794,7 @@ module.exports = {
   getUserSubscriptions,
   syncSubscriptionStatuses,
   initiateRefund,
-  handleWebhook,cancelSubscription
+  handleWebhook,
+  cancelSubscription,
 };
 

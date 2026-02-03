@@ -16,7 +16,7 @@ const notificationSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ['general', 'promotional', 'order_update', 'system', 'security'],
+    enum: ['general', 'promotional', 'order_update', 'system', 'security', 'support_ticket'],
     default: 'general'
   },
   priority: {

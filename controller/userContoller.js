@@ -2,6 +2,7 @@ const { default: axios } = require("axios");
 const User = require("../models/userModel");
 const Ticket = require("../models/ticket_model");
 const Product = require("../models/product_model");
+const Notification = require("../models/notification_model");
 const asyncHandler = require("express-async-handler");
 const bcrypt = require("bcryptjs");
 const twilio = require("twilio");
@@ -19,7 +20,12 @@ const getAllUser = asyncHandler(async (req, res) => {
     throw new Error("User not found");
   }
   if (user) {
-    res.status(200).json({ status: true, details: user });
+    const details = user.map((u) => {
+      const doc = u.toObject ? u.toObject() : { ...u };
+      doc.goldBalance = (parseFloat(u.goldBalance) || 0).toFixed(4);
+      return doc;
+    });
+    res.status(200).json({ status: true, details });
   }
 });
 const getuserById = asyncHandler(async (req, res) => {
@@ -32,8 +38,9 @@ const getuserById = asyncHandler(async (req, res) => {
       res.status(404);
       throw new Error("Not found ");
     }
-
-    res.status(200).json({ message: "success", details: user });
+    const details = user.toObject ? user.toObject() : { ...user };
+    details.goldBalance = (parseFloat(user.goldBalance) || 0).toFixed(4);
+    res.status(200).json({ message: "success", details });
   } catch (error) {
 
     res.status(500).json(error);
@@ -50,13 +57,14 @@ const getuserByIds = asyncHandler(async (req, res) => {
       res.status(404);
       throw new Error("Not found ");
     }
-
-    res.status(200).json({ message: "success", details: user });
+    const details = user.toObject ? user.toObject() : { ...user };
+    details.goldBalance = (parseFloat(user.goldBalance) || 0).toFixed(4);
+    res.status(200).json({ message: "success", details });
   } catch (error) {
 
     res.status(500).json(error);
   }
-}); ``
+});
 // Set Transaction PIN
 const setTransactionPin = asyncHandler(async (req, res) => {
   const { pin } = req.body;
@@ -587,6 +595,29 @@ const addTicketReply = asyncHandler(async (req, res) => {
     await ticket.save();
     await ticket.populate('user', 'name email phone');
     await ticket.populate('replies.repliedBy', 'name email');
+
+    // When admin sends a non-internal reply, create an in-app notification for the user (chat-style)
+    if (!isUserReplying && !isInternal) {
+      const messagePreview = message.length > 100 ? message.substring(0, 97) + '...' : message;
+      try {
+        const ticketNotification = new Notification({
+          title: 'New reply on your support ticket',
+          message: `${ticket.subject}: ${messagePreview}`,
+          type: 'support_ticket',
+          priority: 'normal',
+          targetAudience: 'specific_users',
+          targetUsers: [ticket.user],
+          status: 'sent',
+          createdBy: req.user.id,
+          metadata: { ticketId: ticket._id.toString() },
+          actionType: 'open_screen',
+          screenName: 'support_ticket',
+        });
+        await ticketNotification.save();
+      } catch (notifErr) {
+        console.error('Failed to create ticket reply notification:', notifErr);
+      }
+    }
 
     res.status(200).json({
       success: true,
