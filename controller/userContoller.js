@@ -448,6 +448,25 @@ const updateTicketStatus = asyncHandler(async (req, res) => {
   }
 });
 
+// Helper: count unread replies for admin (user messages since last admin reply / since ticket creation)
+function getUnreadReplyCountForAdmin(ticket) {
+  if (ticket.readByAdmin) return 0;
+  const replies = ticket.replies || [];
+  if (replies.length === 0) return 0;
+  const userId = ticket.user?._id?.toString() || ticket.user?.toString();
+  let count = 0;
+  for (let i = replies.length - 1; i >= 0; i--) {
+    const r = replies[i];
+    const repliedById = r.repliedBy?._id?.toString() || r.repliedBy?.toString();
+    if (repliedById === userId && !r.isInternal) {
+      count++;
+    } else {
+      break; // stop at first non-user (admin) reply
+    }
+  }
+  return count;
+}
+
 // Admin functions for ticket management
 const getAllTickets = asyncHandler(async (req, res) => {
   try {
@@ -460,17 +479,24 @@ const getAllTickets = asyncHandler(async (req, res) => {
 
     const tickets = await Ticket.find(filter)
       .populate('user', 'name email phone')
+      .populate('replies.repliedBy', 'name email')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
     const total = await Ticket.countDocuments(filter);
 
+    const ticketsWithUnreadCount = tickets.map((t) => {
+      const doc = t.toObject ? t.toObject() : t;
+      doc.unreadReplyCount = getUnreadReplyCountForAdmin(t);
+      return doc;
+    });
+
     res.status(200).json({
       success: true,
       message: "All tickets fetched successfully",
       data: {
-        tickets,
+        tickets: ticketsWithUnreadCount,
         pagination: {
           current: parseInt(page),
           pages: Math.ceil(total / limit),
@@ -495,7 +521,10 @@ const getTicketByIdAdmin = asyncHandler(async (req, res) => {
       await ticket.save();
     }
 
-    res.status(200).json({ success: true, ticket });
+    const ticketObj = ticket.toObject ? ticket.toObject() : ticket;
+    ticketObj.unreadReplyCount = 0; // just viewed, so 0
+
+    res.status(200).json({ success: true, ticket: ticketObj });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

@@ -2060,14 +2060,41 @@ const getAllProductOrdersAdmin = async (req, res) => {
     }
 
     if (search) {
-      filter.$or = [
+      // First, find users matching the search term (name, email, phone)
+      const matchingUsers = await userModel.find({
+        $or: [
+          { name: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } },
+          { phone: { $regex: search, $options: 'i' } }
+        ]
+      }).select('_id');
+      
+      const matchingUserIds = matchingUsers.map(u => u._id);
+      
+      // Find products matching the search term (name)
+      const matchingProducts = await Product.find({
+        name: { $regex: search, $options: 'i' }
+      }).select('_id');
+      
+      const matchingProductIds = matchingProducts.map(p => p._id);
+      
+      // Build search filter: order fields OR user IDs OR product IDs in items
+      const searchConditions = [
         { orderCode: { $regex: search, $options: 'i' } },
-        { orderId: { $regex: search, $options: 'i' } },
-        { 'user.name': { $regex: search, $options: 'i' } },
-        { 'user.email': { $regex: search, $options: 'i' } },
-        { 'user.phone': { $regex: search, $options: 'i' } },
-        { 'items.productDataid.name': { $regex: search, $options: 'i' } }
+        { orderId: { $regex: search, $options: 'i' } }
       ];
+      
+      // If we found matching users, add user ID filter
+      if (matchingUserIds.length > 0) {
+        searchConditions.push({ user: { $in: matchingUserIds } });
+      }
+      
+      // If we found matching products, add product ID filter in items array
+      if (matchingProductIds.length > 0) {
+        searchConditions.push({ 'items.productDataid': { $in: matchingProductIds } });
+      }
+      
+      filter.$or = searchConditions;
     }
 
     // Build sort object

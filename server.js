@@ -1196,7 +1196,12 @@ io.on('connection', (socket) => {
 
       if (!ticket.replies) ticket.replies = [];
       ticket.replies.push(reply);
-      // Admin non-internal reply -> mark as unread for user
+      // Unread tracking:
+      // - If USER sends a message -> unread for ADMIN
+      // - If ADMIN sends a non-internal message -> unread for USER
+      if (isOwner && !reply.isInternal) {
+        ticket.readByAdmin = false;
+      }
       if (!isOwner && isAdminRole(socket.userRole) && !(isInternal && isAdmin)) {
         ticket.readByUser = false;
       }
@@ -1275,15 +1280,38 @@ io.on('connection', (socket) => {
 
       // Notify admins if user sent a message
       if (isOwner && !reply.isInternal) {
+        // Helper: count unread replies for admin (user messages since last admin reply)
+        const getUnreadReplyCountForAdmin = (t) => {
+          if (t.readByAdmin) return 0;
+          const replies = t.replies || [];
+          if (replies.length === 0) return 0;
+          const userId = t.user?._id?.toString() || t.user?.toString();
+          let count = 0;
+          for (let i = replies.length - 1; i >= 0; i--) {
+            const r = replies[i];
+            const repliedById = r.repliedBy?._id?.toString() || r.repliedBy?.toString();
+            if (repliedById === userId && !r.isInternal) {
+              count++;
+            } else {
+              break; // stop at first non-user (admin) reply
+            }
+          }
+          return count;
+        };
+
         // Convert ticket to plain object for admin notification
         const ticketObj = ticket.toObject();
         if (ticketObj.user && typeof ticketObj.user === 'object') {
           ticketObj.user = ticketObj.user._id ? ticketObj.user._id.toString() : ticketObj.user.toString();
         }
+        // Add unread reply count for admin
+        ticketObj.unreadReplyCount = getUnreadReplyCountForAdmin(ticket);
+        
         io.to('admin_room').emit('new_ticket_reply', {
           ticketId,
           ticket: ticketObj,
-          reply: replyObj
+          reply: replyObj,
+          unreadReplyCount: ticketObj.unreadReplyCount
         });
       }
 
