@@ -14,6 +14,7 @@ const {
   updateNotificationPreferences,
   getNotificationHistory,
   markNotificationAsRead,
+  deleteNotificationForUser,
   getUserNotificationStats
 } = require('../controller/notificationController');
 
@@ -198,6 +199,11 @@ router.get('/history',
 router.put('/:id/read', 
   isAuth, 
   markNotificationAsRead
+);
+
+router.delete('/:id', 
+  isAuth, 
+  deleteNotificationForUser
 );
 
 router.get('/stats', 

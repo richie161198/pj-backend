@@ -546,6 +546,7 @@ const getNotificationHistory = async (req, res) => {
     // 1. General notifications (targetAudience: 'all')
     // 2. User-specific notifications (userId in targetUsers array)
     // 3. Segment-based notifications (for now, include all segments - can be refined later)
+    // Exclude notifications deleted by this user
     const query = { 
       $or: [
         // General notifications for all users
@@ -559,7 +560,9 @@ const getNotificationHistory = async (req, res) => {
         }
       ],
       // Only show sent notifications (not drafts or cancelled)
-      status: { $in: ['sent', 'scheduled'] }
+      status: { $in: ['sent', 'scheduled'] },
+      // Exclude notifications deleted by this user
+      deletedBy: { $nin: [userId] }
     };
     
     if (type) query.type = type;
@@ -648,6 +651,45 @@ const markNotificationAsRead = async (req, res) => {
   }
 };
 
+// @desc    Delete notification for user (hide from user's view)
+// @route   DELETE /api/v0/notifications/:id
+// @access  Private (User)
+const deleteNotificationForUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    
+    const notification = await Notification.findById(id);
+    if (!notification) {
+      return res.status(404).json({
+        status: false,
+        message: 'Notification not found'
+      });
+    }
+    
+    // Add user to deletedBy array if not already there
+    if (!notification.deletedBy || !notification.deletedBy.includes(userId)) {
+      if (!notification.deletedBy) {
+        notification.deletedBy = [];
+      }
+      notification.deletedBy.push(userId);
+      await notification.save();
+    }
+    
+    res.status(200).json({
+      status: true,
+      message: 'Notification deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting notification:', error);
+    res.status(500).json({
+      status: false,
+      message: 'Server error deleting notification',
+      error: error.message
+    });
+  }
+};
+
 // @desc    Get user notification stats
 // @route   GET /api/v0/notifications/stats
 // @access  Private (User)
@@ -660,7 +702,8 @@ const getUserNotificationStats = async (req, res) => {
         { targetAudience: 'all' },
         { targetUsers: userId },
         { targetSegment: { $exists: true } }
-      ]
+      ],
+      deletedBy: { $nin: [userId] }
     });
     
     const unread = await Notification.countDocuments({
@@ -669,7 +712,8 @@ const getUserNotificationStats = async (req, res) => {
         { targetUsers: userId },
         { targetSegment: { $exists: true } }
       ],
-      readBy: { $nin: [userId] }
+      readBy: { $nin: [userId] },
+      deletedBy: { $nin: [userId] }
     });
     
     const byType = await Notification.aggregate([
@@ -679,7 +723,8 @@ const getUserNotificationStats = async (req, res) => {
             { targetAudience: 'all' },
             { targetUsers: userId },
             { targetSegment: { $exists: true } }
-          ]
+          ],
+          deletedBy: { $nin: [userId] }
         }
       },
       {
@@ -723,5 +768,6 @@ module.exports = {
   updateNotificationPreferences,
   getNotificationHistory,
   markNotificationAsRead,
+  deleteNotificationForUser,
   getUserNotificationStats
 };

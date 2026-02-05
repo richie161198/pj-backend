@@ -150,8 +150,45 @@ const getAuthToken = async (req, res) => {
 };
 
 /**
+ * Cancel existing subscription(s) for the same user and frequency (DAILY, WEEKLY, MONTHLY).
+ * User can only have one subscription per frequency type; creating a new one cancels the previous.
+ * @param {string} userId - User _id
+ * @param {string} frequency - DAILY | WEEKLY | MONTHLY (normalized uppercase)
+ * @returns {Promise<void>}
+ */
+const cancelExistingSubscriptionByFrequency = async (userId, frequency) => {
+  const normalized = (frequency || "").toUpperCase();
+  if (!["DAILY", "WEEKLY", "MONTHLY"].includes(normalized)) {
+    return;
+  }
+  const existing = await Subscription.find({
+    userId,
+    frequency: normalized,
+    status: { $in: ["ACTIVE", "PENDING"] },
+  });
+  for (const sub of existing) {
+    try {
+      const accessToken = await generateAuthToken();
+      await axios.post(
+        `${PHONEPE_CONFIG.baseUrl}/subscriptions/v2/${sub.merchantSubscriptionId}/cancel`,
+        {},
+        { headers: { Authorization: `O-Bearer ${accessToken}`, "Content-Type": "application/json" } }
+      );
+    } catch (err) {
+      // PENDING subscriptions may not exist on PhonePe yet; still mark as cancelled in DB
+      console.warn(`⚠️ PhonePe cancel for ${sub.merchantSubscriptionId} failed (may be PENDING):`, err.response?.data || err.message);
+    }
+    sub.status = "CANCELLED";
+    sub.cancelledAt = new Date();
+    await sub.save();
+    console.log(`✅ Cancelled existing ${normalized} subscription ${sub.merchantSubscriptionId} for user ${userId}`);
+  }
+};
+
+/**
  * Setup Subscription (Create Mandate)
- * This creates a UPI AutoPay mandate with the customer
+ * This creates a UPI AutoPay mandate with the customer.
+ * For DAILY, WEEKLY, or MONTHLY: only one subscription per frequency per user; existing one is cancelled first.
  */
 const setupSubscription = async (req, res) => {
 
@@ -186,6 +223,12 @@ const setupSubscription = async (req, res) => {
         success: false,
         message: "User not found",
       });
+    }
+
+    // Normalize frequency and enforce single subscription per frequency for Daily/Weekly/Monthly
+    const normalizedFrequency = (frequency || "ON_DEMAND").toUpperCase().replace(/\s+/g, "_");
+    if (["DAILY", "WEEKLY", "MONTHLY"].includes(normalizedFrequency)) {
+      await cancelExistingSubscriptionByFrequency(userId, normalizedFrequency);
     }
 
     // Generate unique IDs
@@ -247,7 +290,7 @@ console.log("accessToken",accessToken);
         amountType,
         // maxAmount: calculatedMaxAmount,
         maxAmount: amount*100,
-        frequency,
+        frequency: normalizedFrequency,
         expireAt: subscriptionExpireAt,
         paymentMode: paymentModeConfig,
       },
@@ -285,7 +328,7 @@ console.log("accessToken",accessToken);
       amount: amount,
       // maxAmount: maxAmount || amount * 10,
       maxAmount: amount,
-      frequency,
+      frequency: normalizedFrequency,
       amountType,
       status: "PENDING",
       phonepeOrderId: response.data.orderId,
