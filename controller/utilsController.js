@@ -33,6 +33,8 @@ const getInvestmentSettings = asyncHandler(async (req, res) => {
       silverStatus: settings.silverStatus ?? "inactive",
       goldPremiumPercentage: settings.goldPremiumPercentage ?? 9.5,
       silverPremiumPercentage: settings.silverPremiumPercentage ?? 9.5,
+      shivsahaiGoldPremiumPercentage: settings.shivsahaiGoldPremiumPercentage ?? 9.5,
+      shivsahaiSilverPremiumPercentage: settings.shivsahaiSilverPremiumPercentage ?? 9.5,
       updatedAt: settings.updatedAt,
     };
 
@@ -72,7 +74,9 @@ const createInvestmentSettings = asyncHandler(async (req, res) => {
       silverStatus, 
       makingChargesPercentage,
       goldPremiumPercentage,
-      silverPremiumPercentage
+      silverPremiumPercentage,
+      shivsahaiGoldPremiumPercentage,
+      shivsahaiSilverPremiumPercentage
     } = req.body;
     
     console.log("Parsed Input:", { 
@@ -83,7 +87,11 @@ const createInvestmentSettings = asyncHandler(async (req, res) => {
       goldStatus, 
       silverRate, 
       silverStatus, 
-      makingChargesPercentage 
+      makingChargesPercentage,
+      goldPremiumPercentage,
+      silverPremiumPercentage,
+      shivsahaiGoldPremiumPercentage,
+      shivsahaiSilverPremiumPercentage
     });
     
     // Use goldRate24kt if provided, otherwise fall back to goldRate for backward compatibility
@@ -107,26 +115,90 @@ const createInvestmentSettings = asyncHandler(async (req, res) => {
     // either update existing or create new
     let settings = await InvestmentSettings.findOne();
     if (settings) {
-      // Update goldRate for backward compatibility (use 24kt value)
-      settings.goldRate = finalGoldRate24kt;
-      settings.goldRate24kt = finalGoldRate24kt;
-      settings.goldRate22kt = goldRate22kt || 0;
-      settings.goldRate18kt = goldRate18kt || 0;
-      settings.goldStatus = goldStatus ?? settings.goldStatus;
-      settings.silverRate = silverRate;
-      // Auto-calculate 92.5% silver if not provided
-      settings.silverRate925 = silverRate925 || parseFloat((silverRate * 0.925).toFixed(2));
-      settings.silverStatus = silverStatus ?? settings.silverStatus;
-      if (makingChargesPercentage) {
-        settings.makingChargesPercentage = makingChargesPercentage;
+      // Convert to number and validate premium percentages
+      const goldPremium = typeof goldPremiumPercentage === 'string' ? parseFloat(goldPremiumPercentage) : goldPremiumPercentage;
+      const silverPremium = typeof silverPremiumPercentage === 'string' ? parseFloat(silverPremiumPercentage) : silverPremiumPercentage;
+      const shivsahaiGoldPremium = typeof shivsahaiGoldPremiumPercentage === 'string' ? parseFloat(shivsahaiGoldPremiumPercentage) : shivsahaiGoldPremiumPercentage;
+      const shivsahaiSilverPremium = typeof shivsahaiSilverPremiumPercentage === 'string' ? parseFloat(shivsahaiSilverPremiumPercentage) : shivsahaiSilverPremiumPercentage;
+      
+      console.log('🔍 Premium values received:', {
+        goldPremium,
+        silverPremium,
+        shivsahaiGoldPremium,
+        shivsahaiSilverPremium,
+        shivsahaiGoldPremiumType: typeof shivsahaiGoldPremium,
+        shivsahaiGoldPremiumIsNaN: isNaN(shivsahaiGoldPremium),
+        shivsahaiGoldPremiumUndefined: shivsahaiGoldPremium === undefined,
+        shivsahaiGoldPremiumNull: shivsahaiGoldPremium === null
+      });
+      
+      // Build update object - always include premium fields if they're valid numbers
+      const updateData = {
+        goldRate: finalGoldRate24kt,
+        goldRate24kt: finalGoldRate24kt,
+        goldRate22kt: goldRate22kt || 0,
+        goldRate18kt: goldRate18kt || 0,
+        goldStatus: goldStatus ?? settings.goldStatus,
+        silverRate: silverRate,
+        silverRate925: silverRate925 || parseFloat((silverRate * 0.925).toFixed(2)),
+        silverStatus: silverStatus ?? settings.silverStatus,
+        updatedAt: new Date(),
+      };
+      
+      // Add making charges if provided
+      if (makingChargesPercentage != null && !isNaN(makingChargesPercentage)) {
+        updateData.makingChargesPercentage = parseFloat(makingChargesPercentage);
       }
-      if (goldPremiumPercentage != null && !isNaN(goldPremiumPercentage)) {
-        settings.goldPremiumPercentage = parseFloat(goldPremiumPercentage);
+      
+      // Always update premium percentages - frontend already validates, so trust the values
+      // But add extra safety checks
+      if (goldPremium !== undefined && goldPremium !== null && !isNaN(goldPremium) && goldPremium >= 0) {
+        updateData.goldPremiumPercentage = parseFloat(goldPremium);
+        console.log(`✅ Will update goldPremiumPercentage to: ${updateData.goldPremiumPercentage}`);
+      } else {
+        updateData.goldPremiumPercentage = settings.goldPremiumPercentage ?? 9.5;
       }
-      if (silverPremiumPercentage != null && !isNaN(silverPremiumPercentage)) {
-        settings.silverPremiumPercentage = parseFloat(silverPremiumPercentage);
+      
+      if (silverPremium !== undefined && silverPremium !== null && !isNaN(silverPremium) && silverPremium >= 0) {
+        updateData.silverPremiumPercentage = parseFloat(silverPremium);
+        console.log(`✅ Will update silverPremiumPercentage to: ${updateData.silverPremiumPercentage}`);
+      } else {
+        updateData.silverPremiumPercentage = settings.silverPremiumPercentage ?? 9.5;
       }
-      await settings.save();
+      
+      // ALWAYS include Shivsahai premium fields in update - these are critical
+      // Check the original values from req.body, not the converted ones
+      if (shivsahaiGoldPremium !== undefined && shivsahaiGoldPremium !== null && !isNaN(shivsahaiGoldPremium) && shivsahaiGoldPremium >= 0) {
+        updateData.shivsahaiGoldPremiumPercentage = parseFloat(shivsahaiGoldPremium);
+        console.log(`✅ Will update shivsahaiGoldPremiumPercentage to: ${updateData.shivsahaiGoldPremiumPercentage}`);
+      } else {
+        // Use existing value if available, otherwise default to 9.5
+        updateData.shivsahaiGoldPremiumPercentage = settings.shivsahaiGoldPremiumPercentage ?? 9.5;
+        console.log(`⚠️ Using existing/default shivsahaiGoldPremiumPercentage: ${updateData.shivsahaiGoldPremiumPercentage}. Received: ${shivsahaiGoldPremiumPercentage} (${typeof shivsahaiGoldPremiumPercentage}), converted: ${shivsahaiGoldPremium} (${typeof shivsahaiGoldPremium})`);
+      }
+      
+      if (shivsahaiSilverPremium !== undefined && shivsahaiSilverPremium !== null && !isNaN(shivsahaiSilverPremium) && shivsahaiSilverPremium >= 0) {
+        updateData.shivsahaiSilverPremiumPercentage = parseFloat(shivsahaiSilverPremium);
+        console.log(`✅ Will update shivsahaiSilverPremiumPercentage to: ${updateData.shivsahaiSilverPremiumPercentage}`);
+      } else {
+        // Use existing value if available, otherwise default to 9.5
+        updateData.shivsahaiSilverPremiumPercentage = settings.shivsahaiSilverPremiumPercentage ?? 9.5;
+        console.log(`⚠️ Using existing/default shivsahaiSilverPremiumPercentage: ${updateData.shivsahaiSilverPremiumPercentage}. Received: ${shivsahaiSilverPremiumPercentage} (${typeof shivsahaiSilverPremiumPercentage}), converted: ${shivsahaiSilverPremium} (${typeof shivsahaiSilverPremium})`);
+      }
+      
+      // Use findOneAndUpdate to ensure values are saved
+      settings = await InvestmentSettings.findOneAndUpdate(
+        { _id: settings._id },
+        { $set: updateData },
+        { new: true, runValidators: true }
+      );
+      
+      console.log('💾 Saved settings:', {
+        goldPremiumPercentage: settings.goldPremiumPercentage,
+        silverPremiumPercentage: settings.silverPremiumPercentage,
+        shivsahaiGoldPremiumPercentage: settings.shivsahaiGoldPremiumPercentage,
+        shivsahaiSilverPremiumPercentage: settings.shivsahaiSilverPremiumPercentage
+      });
     } else {
       settings = await InvestmentSettings.create({
         goldRate: finalGoldRate24kt, // Backward compatibility
@@ -139,7 +211,9 @@ const createInvestmentSettings = asyncHandler(async (req, res) => {
         silverStatus: silverStatus ?? false,
         makingChargesPercentage: makingChargesPercentage || 15,
         goldPremiumPercentage: goldPremiumPercentage != null && !isNaN(goldPremiumPercentage) ? parseFloat(goldPremiumPercentage) : 9.5,
-        silverPremiumPercentage: silverPremiumPercentage != null && !isNaN(silverPremiumPercentage) ? parseFloat(silverPremiumPercentage) : 9.5
+        silverPremiumPercentage: silverPremiumPercentage != null && !isNaN(silverPremiumPercentage) ? parseFloat(silverPremiumPercentage) : 9.5,
+        shivsahaiGoldPremiumPercentage: shivsahaiGoldPremiumPercentage != null && !isNaN(shivsahaiGoldPremiumPercentage) ? parseFloat(shivsahaiGoldPremiumPercentage) : 9.5,
+        shivsahaiSilverPremiumPercentage: shivsahaiSilverPremiumPercentage != null && !isNaN(shivsahaiSilverPremiumPercentage) ? parseFloat(shivsahaiSilverPremiumPercentage) : 9.5
       });
     }
 
@@ -160,7 +234,13 @@ const createInvestmentSettings = asyncHandler(async (req, res) => {
         return res.status(201).json({
           status: true,
           message: "✅ Investment settings saved successfully and all product prices updated",
-          settings,
+          settings: {
+            ...settings.toObject(),
+            goldPremiumPercentage: settings.goldPremiumPercentage,
+            silverPremiumPercentage: settings.silverPremiumPercentage,
+            shivsahaiGoldPremiumPercentage: settings.shivsahaiGoldPremiumPercentage,
+            shivsahaiSilverPremiumPercentage: settings.shivsahaiSilverPremiumPercentage,
+          },
           productUpdateResult: updateResult
         });
       } catch (updateError) {
@@ -168,7 +248,13 @@ const createInvestmentSettings = asyncHandler(async (req, res) => {
         return res.status(201).json({
           status: true,
           message: "✅ Investment settings saved successfully, but failed to update some product prices",
-          settings,
+          settings: {
+            ...settings.toObject(),
+            goldPremiumPercentage: settings.goldPremiumPercentage,
+            silverPremiumPercentage: settings.silverPremiumPercentage,
+            shivsahaiGoldPremiumPercentage: settings.shivsahaiGoldPremiumPercentage,
+            shivsahaiSilverPremiumPercentage: settings.shivsahaiSilverPremiumPercentage,
+          },
           warning: "Some product prices may not have been updated. Please check manually."
         });
       }
@@ -177,7 +263,13 @@ const createInvestmentSettings = asyncHandler(async (req, res) => {
       return res.status(201).json({
         status: true,
         message: "✅ Investment settings saved successfully (no price changes detected)",
-        settings,
+        settings: {
+          ...settings.toObject(),
+          goldPremiumPercentage: settings.goldPremiumPercentage,
+          silverPremiumPercentage: settings.silverPremiumPercentage,
+          shivsahaiGoldPremiumPercentage: settings.shivsahaiGoldPremiumPercentage,
+          shivsahaiSilverPremiumPercentage: settings.shivsahaiSilverPremiumPercentage,
+        },
       });
     }
 

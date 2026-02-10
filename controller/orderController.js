@@ -10,6 +10,7 @@ const User = require('../models/userModel');
 const Product = require('../models/product_model');
 const bmcService = require('../services/bmcService');
 const bvcService = require('../services/bvcService');
+const { getLatestExchangeRate } = require('./goldPriceController');
 const { sendEmail, sendEmailWithAttachment } = require('../helpers/mailer');
 const { generateOrderInvoicePdf, generateInvestmentInvoicePdf, logoBase64 } = require('../services/pdfService');
 const twilio = require("twilio");
@@ -337,19 +338,41 @@ async function generateInvestmentInvoicePDF(invoiceData) {
 
 async function fetchLiveGoldPriceINR() {
   try {
-    const response = await axios.get("https://www.goldapi.io/api/XAU/INR", {
+    // Step 1: Fetch gold price in USD per ounce
+    const goldResponse = await axios.get("https://api.gold-api.com/price/XAU", {
       headers: {
-        "x-access-token": "goldapi-4y761smdi9d802-io", // move to process.env in production
         "Content-Type": "application/json",
       },
+      timeout: 15000,
     });
 
-    // GoldAPI returns price in troy ounces; convert to grams
-    if (response.data && response.data.price) {
-      const pricePerOunce = parseFloat(response.data.price);
-      const pricePerGram = +(pricePerOunce / 31.1035).toFixed(2); // 1 oz = 31.1035 g
-      return pricePerGram;
+    // Extract gold price in USD per ounce
+    // Try multiple possible field names
+    const goldPriceUSDPerOunce = parseFloat(
+      goldResponse.data?.price || 
+      goldResponse.data?.price_per_ounce || 
+      goldResponse.data?.XAU ||
+      goldResponse.data?.value ||
+      goldResponse.data?.rate
+    );
+    
+    if (!goldPriceUSDPerOunce || Number.isNaN(goldPriceUSDPerOunce) || goldPriceUSDPerOunce <= 0) {
+      throw new Error(`Invalid gold price received. Expected numeric price > 0, got: ${goldPriceUSDPerOunce}`);
     }
+
+    // Step 2: Get USD to INR exchange rate from database
+    const usdToInrRate = await getLatestExchangeRate();
+    
+    if (!usdToInrRate || Number.isNaN(usdToInrRate) || usdToInrRate <= 0) {
+      throw new Error(`Invalid exchange rate from database. Expected numeric rate > 0, got: ${usdToInrRate}`);
+    }
+
+    // Step 3: Convert gold price from USD/oz to INR/gram
+    // 1 troy ounce = 31.1035 grams
+    const goldPriceINRPerOunce = goldPriceUSDPerOunce * usdToInrRate;
+    const pricePerGram = parseFloat((goldPriceINRPerOunce / 31.1035).toFixed(2)); // Convert to per gram
+
+    return pricePerGram;
   } catch (err) {
     console.error("Error fetching gold price:", err.message);
   }
@@ -2551,45 +2574,266 @@ const acceptReturnRefundRequest = async (req, res) => {
     returnRequest.updatedAt = new Date();
     await returnRequest.save();
 
-    // Update order status when return/refund is approved
     // Handle both populated and unpopulated orderId
     const orderId = returnRequest.orderId._id
       ? returnRequest.orderId._id.toString()
       : returnRequest.orderId.toString();
 
-    const order = await productOrder.findById(orderId);
-    if (order) {
-      const totalOrderedQty = order.items.reduce((sum, item) => sum + item.quantity, 0);
-      const totalRequestedQty = returnRequest.items.reduce((sum, item) => sum + item.qty, 0);
+    const order = await productOrder.findById(orderId)
+      .populate('user', 'name email phone');
 
-      // Always update refund amount when return/refund is approved
-      if (returnRequest.refundAmount) {
-        order.refundAmount = (order.refundAmount || 0) + returnRequest.refundAmount;
-      }
-
-      if (totalRequestedQty === totalOrderedQty) {
-        // Full return/replacement - mark order as fully returned/replaced
-        if (returnRequest.requestType === 'replacement') {
-          order.status = 'REPLACEMENT_APPROVED';
-        } else {
-          order.status = 'RETURNED';
-          order.returnReason = returnRequest.items[0]?.reason || 'Return approved';
-        }
-      } else {
-        // Partial return/replacement - mark order as in progress
-        if (returnRequest.requestType === 'replacement') {
-          order.status = 'REPLACEMENT_IN_PROGRESS';
-        } else {
-          order.status = 'RETURN_IN_PROGRESS';
-          order.returnReason = returnRequest.items[0]?.reason || 'Return approved';
-        }
-      }
-      await order.save();
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        error: "Order not found"
+      });
     }
+
+    const totalOrderedQty = order.items.reduce((sum, item) => sum + item.quantity, 0);
+    const totalRequestedQty = returnRequest.items.reduce((sum, item) => sum + item.qty, 0);
+
+    // Always update refund amount when return/refund is approved
+    if (returnRequest.refundAmount) {
+      order.refundAmount = (order.refundAmount || 0) + returnRequest.refundAmount;
+    }
+
+    // Handle REPLACEMENT requests - create reverse order and new replacement shipment
+    if (returnRequest.requestType === 'replacement') {
+      try {
+        // Find original shipment
+        const originalShipment = await Shipment.findOne({ orderCode: order.orderCode });
+        
+        if (!originalShipment) {
+          console.warn('⚠️ Original shipment not found for replacement order:', order.orderCode);
+        } else {
+          // Parse delivery address
+          let deliveryAddress = {};
+          try {
+            deliveryAddress = typeof order.deliveryAddress === 'string'
+              ? JSON.parse(order.deliveryAddress)
+              : order.deliveryAddress || {};
+          } catch (e) {
+            deliveryAddress = originalShipment.deliveryAddress || {};
+          }
+
+          // 1. Create REVERSE ORDER (Pickup) for defective items using BVC Reverse Order API
+          console.log('🔄 Creating reverse order for replacement pickup...');
+          const reverseRequestId = `REP_${order.orderCode}_${Date.now()}`;
+          
+          // Calculate value for reverse order (must be numeric, minimum 1.0)
+          const reverseValue = Math.max(
+            returnRequest.items.reduce((sum, item) => {
+              const product = item.productId;
+              return sum + ((product?.sellingprice || product?.price || 0) * item.qty);
+            }, 0),
+            originalShipment.totalAmount || 0,
+            1.0 // Minimum value as per API requirement
+          );
+          
+          const reverseBvcResponse = await bvcService.createReverseShipment({
+            requestId: reverseRequestId,
+            awbNo: originalShipment.docketNo || originalShipment.awbNo || order.orderCode,
+            customerName: originalShipment.customerName || order.user?.name || 'Customer',
+            customerAddress: deliveryAddress.addressLine1 
+              ? deliveryAddress 
+              : originalShipment.deliveryAddress,
+            customerPincode: deliveryAddress.pincode || originalShipment.deliveryAddress?.pincode || '000000',
+            customerPhone: originalShipment.customerPhone || order.user?.phone || '0000000000',
+            weight: originalShipment.packageDetails?.weight || 0.5,
+            skuDescription: returnRequest.items.map(item => 
+              item.productId?.name || 'Product'
+            ).join(', ') || 'Replacement Item',
+            value: reverseValue,
+          });
+
+          if (reverseBvcResponse.success) {
+            console.log('✅ Reverse order created successfully:', reverseBvcResponse.reverseAwbNo);
+            
+            // Create reverse shipment record
+            const reverseShipment = new Shipment({
+              orderId: order._id,
+              orderCode: `REV_${order.orderCode}`,
+              userId: order.user,
+              docketNo: reverseBvcResponse.reverseAwbNo,
+              awbNo: reverseBvcResponse.reverseAwbNo,
+              shipmentType: 'REVERSE',
+              status: 'CREATED',
+              customerName: originalShipment.customerName || order.user?.name || 'Customer',
+              customerPhone: originalShipment.customerPhone || order.user?.phone || '0000000000',
+              customerEmail: originalShipment.customerEmail || order.user?.email,
+              deliveryAddress: originalShipment.deliveryAddress || {
+                addressLine1: deliveryAddress.addressLine1 || deliveryAddress.street || 'N/A',
+                addressLine2: deliveryAddress.addressLine2 || deliveryAddress.landmark || '',
+                city: deliveryAddress.city || 'N/A',
+                state: deliveryAddress.state || 'N/A',
+                pincode: deliveryAddress.pincode || '000000',
+              },
+              packageDetails: originalShipment.packageDetails || { weight: 0.5, noOfPieces: 1 },
+              items: returnRequest.items.map(item => ({
+                productId: item.productId?._id || item.productId,
+                productName: item.productId?.name || 'Product',
+                productCode: item.productId?.productCode || 'PROD',
+                quantity: item.qty,
+                price: item.productId?.sellingprice || item.productId?.price || 0,
+              })),
+              totalAmount: returnRequest.items.reduce((sum, item) => {
+                const product = item.productId;
+                return sum + ((product?.sellingprice || product?.price || 0) * item.qty);
+              }, 0),
+              originalShipmentId: originalShipment._id,
+              trackingHistory: [{
+                status: 'Reverse Shipment Created',
+                statusCode: 'RC',
+                description: 'Replacement pickup initiated',
+                timestamp: new Date(),
+                updatedBy: 'System',
+              }],
+            });
+            await reverseShipment.save();
+
+            // Update original shipment with reverse shipment reference
+            originalShipment.returnShipmentId = reverseShipment._id;
+            originalShipment.reverseAwbNo = reverseBvcResponse.reverseAwbNo;
+            await originalShipment.save();
+          } else {
+            console.error('❌ Failed to create reverse order:', reverseBvcResponse.error);
+          }
+
+          // 2. Create NEW REPLACEMENT ORDER with same items
+          console.log('📦 Creating replacement order...');
+          const replacementOrderCode = `REP_${order.orderCode}_${Date.now()}`;
+          const replacementOrder = new productOrder({
+            user: order.user,
+            orderCode: replacementOrderCode,
+            items: returnRequest.items.map(item => ({
+              productDataid: item.productId?._id || item.productId,
+              quantity: item.qty,
+              price: item.productId?.sellingprice || item.productId?.price || 0,
+            })),
+            totalAmount: returnRequest.items.reduce((sum, item) => {
+              const product = item.productId;
+              return sum + ((product?.sellingprice || product?.price || 0) * item.qty);
+            }, 0),
+            deliveryAddress: order.deliveryAddress,
+            status: 'CONFIRMED',
+          });
+          await replacementOrder.save();
+
+          // 3. Create FORWARD SHIPMENT for replacement items using BVC Order Upload API
+          console.log('📦 Creating forward shipment for replacement order...');
+          const replacementItems = await Promise.all(
+            returnRequest.items.map(async (item) => {
+              const product = await Product.findById(item.productId?._id || item.productId);
+              return {
+                productId: product?._id,
+                productName: product?.name || 'Product',
+                productCode: product?.productCode || 'PROD',
+                quantity: item.qty,
+                price: product?.sellingprice || product?.price || 0,
+              };
+            })
+          );
+
+          const replacementTotalAmount = replacementItems.reduce(
+            (sum, item) => sum + (item.price * item.quantity), 0
+          );
+
+          const forwardBvcResponse = await bvcService.createShipment({
+            orderCode: replacementOrderCode,
+            customerName: originalShipment.customerName || order.user?.name || 'Customer',
+            customerPhone: originalShipment.customerPhone || order.user?.phone || '0000000000',
+            deliveryAddress: originalShipment.deliveryAddress || {
+              addressLine1: deliveryAddress.addressLine1 || deliveryAddress.street || 'N/A',
+              addressLine2: deliveryAddress.addressLine2 || deliveryAddress.landmark || '',
+              city: deliveryAddress.city || 'N/A',
+              state: deliveryAddress.state || 'N/A',
+              pincode: deliveryAddress.pincode || '000000',
+            },
+            items: replacementItems,
+            totalAmount: replacementTotalAmount,
+            codAmount: 0,
+            weight: originalShipment.packageDetails?.weight || 0.5,
+            packageCount: replacementItems.length,
+          });
+
+          if (forwardBvcResponse.success) {
+            console.log('✅ Replacement shipment created successfully:', forwardBvcResponse.docketNo);
+            
+            // Create forward shipment record for replacement
+            const replacementShipment = new Shipment({
+              orderId: replacementOrder._id,
+              orderCode: replacementOrderCode,
+              userId: order.user,
+              bvcOrderNo: forwardBvcResponse.orderNo,
+              docketNo: forwardBvcResponse.docketNo,
+              awbNo: forwardBvcResponse.docketNo,
+              shipmentType: 'FORWARD',
+              status: 'CREATED',
+              bvcStatus: 'Order Created',
+              customerName: originalShipment.customerName || order.user?.name || 'Customer',
+              customerPhone: originalShipment.customerPhone || order.user?.phone || '0000000000',
+              customerEmail: originalShipment.customerEmail || order.user?.email,
+              deliveryAddress: originalShipment.deliveryAddress || {
+                addressLine1: deliveryAddress.addressLine1 || deliveryAddress.street || 'N/A',
+                addressLine2: deliveryAddress.addressLine2 || deliveryAddress.landmark || '',
+                city: deliveryAddress.city || 'N/A',
+                state: deliveryAddress.state || 'N/A',
+                pincode: deliveryAddress.pincode || '000000',
+              },
+              packageDetails: originalShipment.packageDetails || { weight: 0.5, noOfPieces: 1 },
+              items: replacementItems,
+              paymentMode: 'PREPAID',
+              totalAmount: replacementTotalAmount,
+              serviceType: 'Express',
+              trackingHistory: [{
+                status: 'Shipment Created',
+                statusCode: 'SC',
+                description: 'Replacement shipment initiated',
+                timestamp: new Date(),
+                updatedBy: 'System',
+              }],
+              bvcCreateResponse: forwardBvcResponse.rawResponse,
+            });
+            await replacementShipment.save();
+
+            // Update replacement order with shipment reference
+            replacementOrder.shipmentId = replacementShipment._id;
+            await replacementOrder.save();
+          } else {
+            console.error('❌ Failed to create replacement shipment:', forwardBvcResponse.error);
+          }
+        }
+      } catch (replacementError) {
+        console.error('❌ Error processing replacement:', replacementError);
+        // Don't fail the entire request, but log the error
+      }
+    }
+
+    // Update order status
+    if (totalRequestedQty === totalOrderedQty) {
+      // Full return/replacement - mark order as fully returned/replaced
+      if (returnRequest.requestType === 'replacement') {
+        order.status = 'REPLACEMENT_APPROVED';
+      } else {
+        order.status = 'RETURNED';
+        order.returnReason = returnRequest.items[0]?.reason || 'Return approved';
+      }
+    } else {
+      // Partial return/replacement - mark order as in progress
+      if (returnRequest.requestType === 'replacement') {
+        order.status = 'REPLACEMENT_IN_PROGRESS';
+      } else {
+        order.status = 'RETURN_IN_PROGRESS';
+        order.returnReason = returnRequest.items[0]?.reason || 'Return approved';
+      }
+    }
+    await order.save();
 
     res.status(200).json({
       success: true,
-      message: "Return/refund request approved successfully",
+      message: returnRequest.requestType === 'replacement' 
+        ? "Replacement request approved successfully. Reverse order and replacement shipment created."
+        : "Return/refund request approved successfully",
       returnRequest
     });
   } catch (err) {

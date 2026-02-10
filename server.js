@@ -558,23 +558,6 @@ app.get("/debug-banner-routes", (req, res) => {
 });
 
 
-// Start server
-// app.all("*", (req, res) => {
-//   res.status(404).json({ status: "false", message: "route not found" });
-// });
-
-// app.use(errorHandler);
-
-
-
-
-
-
-// Utility: Convert number to words (simple Indian currency words)
-// function numberToWords(num) {
-//   const inWords = require("number-to-words").toWords;
-//   return inWords(num).replace(/\b\w/g, l => l.toUpperCase());
-// }
 
 app.post("/api/v0/generate-invoice", async (req, res) => {
   try {

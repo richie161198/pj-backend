@@ -52,13 +52,25 @@ const investmentSchema = new mongoose.Schema({
         default: 9.5,
         min: 0,
         max: 100
-    }, // Premium percentage added to fetched gold price
+    }, // Premium percentage added to fetched gold price (general/fallback)
     silverPremiumPercentage: {
         type: Number,
         default: 9.5,
         min: 0,
         max: 100
-    }, // Premium percentage added to fetched silver price
+    }, // Premium percentage added to fetched silver price (general/fallback)
+    shivsahaiGoldPremiumPercentage: {
+        type: Number,
+        default: 9.5,
+        min: 0,
+        max: 100
+    }, // Premium percentage added to gold price when fetched from Shivsahai API
+    shivsahaiSilverPremiumPercentage: {
+        type: Number,
+        default: 9.5,
+        min: 0,
+        max: 100
+    }, // Premium percentage added to silver price when fetched from Shivsahai API
     updatedAt: {
         type: Date,
         default: Date.now
